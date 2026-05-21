@@ -346,7 +346,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                     REWORK OFF
                 </button>
 
-                <button id="onsw" class="btn btn-danger px-4" style="min-width:160px;">
+                <button id="onsw" class="btn btn-secondary px-4" style="min-width:160px;" disabled>
                     CONVEYOR OFF
                 </button>
 
@@ -596,6 +596,8 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
                             updateNotificationPanel();
                             updateNavbarAlert();
+                            machineDataReady = true;
+                            updateConveyorButton();
 
                         });
 
@@ -862,13 +864,63 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
         const conveyorBtn = document.getElementById("onsw");
 
-        // klik tombol
-        if (conveyorBtn) {
+        // ── Cek apakah ada mesin abnormal di plant saat ini ──
+        function hasAbnormalMachine() {
+            return abnormalMachinesList.some(m =>
+                m.plant.toLowerCase() === currentPlant.toLowerCase()
+            );
+        }
 
+        // ── Update tampilan & status tombol conveyor ──
+        function updateConveyorButton() {
+
+            if (!conveyorBtn) return;
+
+            const isAbnormal = hasAbnormalMachine();
+
+            if (isAbnormal && !reworkMode) {
+                // Ada mesin abnormal & bukan mode rework → paksa stop & kunci tombol
+                conveyorStatus = 2;
+                conveyorBtn.innerText = "CONVEYOR OFF";
+                conveyorBtn.classList.remove("btn-danger", "btn-success");
+                conveyorBtn.classList.add("btn-secondary");
+                conveyorBtn.disabled = true;
+                conveyorBtn.title = "Conveyor dikunci: ada mesin abnormal";
+
+                // Auto-stop ke database
+                fetch("set_conveyor.php", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: `plant=${encodeURIComponent(currentPlant)}&status=2`
+                });
+
+            } else {
+                // Normal / rework → tombol bisa diklik
+                conveyorBtn.disabled = false;
+                conveyorBtn.title = "";
+
+                if (conveyorStatus == 2) {
+                    conveyorBtn.innerText = "CONVEYOR ON";
+                    conveyorBtn.classList.remove("btn-danger", "btn-secondary");
+                    conveyorBtn.classList.add("btn-success");
+                } else {
+                    conveyorBtn.innerText = "CONVEYOR OFF";
+                    conveyorBtn.classList.remove("btn-success", "btn-secondary");
+                    conveyorBtn.classList.add("btn-danger");
+                }
+            }
+        }
+
+        // ── Klik tombol conveyor ──
+        if (conveyorBtn) {
             conveyorBtn.addEventListener("click", function() {
 
+                // Double-check: jika ada abnormal & bukan rework, abaikan klik
+                if (hasAbnormalMachine() && !reworkMode) return;
+
                 let newStatus = (conveyorStatus == 1) ? 2 : 1;
-                let plantId = (currentPlant == "assembly") ? 1 : currentPlant;
 
                 fetch("set_conveyor.php", {
                         method: "POST",
@@ -879,56 +931,28 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                     })
                     .then(res => res.json())
                     .then(data => {
-
                         if (data.status === "success") {
-
                             conveyorStatus = newStatus;
                             updateConveyorButton();
-
                         } else {
                             alert("Gagal update conveyor");
                         }
-
                     });
-
             });
-
         }
 
-        // update tampilan tombol
-        function updateConveyorButton() {
+        // ── Flag: apakah data mesin sudah siap ──
+        let machineDataReady = false;
 
-            if (conveyorStatus == 2) {
-
-                // STOPPED
-                conveyorBtn.innerText = "CONVEYOR ON";
-                conveyorBtn.classList.remove("btn-danger");
-                conveyorBtn.classList.add("btn-success");
-
-            } else {
-
-                // RUNNING
-                conveyorBtn.innerText = "CONVEYOR OFF";
-                conveyorBtn.classList.remove("btn-success");
-                conveyorBtn.classList.add("btn-danger");
-
-            }
-
-        }
-
-        // ambil status dari database
+        // ── Ambil status conveyor dari database ──
         function loadConveyorStatus() {
-
-            let plantId = (currentPlant === "assembly") ? 1 : currentPlant;
             fetch("get_conveyor_status.php?plant=" + encodeURIComponent(currentPlant))
                 .then(res => res.json())
                 .then(data => {
-
                     conveyorStatus = parseInt(data.status) || 1;
-                    updateConveyorButton();
-
+                    // Hanya update tombol jika data mesin sudah siap
+                    if (machineDataReady) updateConveyorButton();
                 });
-
         }
     </script>
 

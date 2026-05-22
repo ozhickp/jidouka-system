@@ -36,7 +36,7 @@ function sendAbnormalNotification($machine_id)
         $mail->setFrom(SMTP_USER, EMAIL_FROM_NAME);
 
         // Ambil semua email aktif
-        $result = mysqli_query($conn, "SELECT email FROM notification_settings WHERE is_active=1"); 
+        $result = mysqli_query($conn, "SELECT email FROM notification_settings WHERE is_active=1");
         $hasRecipient = false;
         while ($row = mysqli_fetch_assoc($result)) {
             if (filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
@@ -51,12 +51,12 @@ function sendAbnormalNotification($machine_id)
         }
 
         $mail->isHTML(true);
-        $mail->Subject = 'ALERT: Mesin ABNORMAL';
+        $mail->Subject = 'ALERT: Mesin STOPPED';
         $mail->Body = "
             <h3 style='color:red;'>⚠️ Mesin Mengalami Gangguan</h3>
             <p><strong>Machine:</strong> {$machine_name}</p>
             <p><strong>Plant:</strong> {$plant}</p>
-            <p>Status berubah menjadi <b style='color:red;'>ABNORMAL</b></p>
+            <p>Status berubah menjadi <b style='color:red;'>STOPPED</b></p>
             <p>Silakan cek <a href='http://localhost/mtc_project/mtc_project/monitor.php'>monitor page</a></p>
             <hr>
             <small>Machine Monitoring System</small>

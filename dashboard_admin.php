@@ -169,8 +169,8 @@ $admin = $result_admin->fetch_assoc();
 
             <hr>
 
-            <a href="view_monitoring.php?plant=<?= $plant ?>">
-                📺 <span class="text-label">View Monitoring</span>
+            <a href="history_rework.php">
+                🔄 <span class="text-label">History Rework</span>
             </a>
 
             <a href="settings.php">

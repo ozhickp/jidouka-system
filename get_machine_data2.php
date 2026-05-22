@@ -26,7 +26,7 @@ while ($row = mysqli_fetch_assoc($query_machine)) {
         $condition = "RUNNING";
         $color     = "green";
     } else {
-        $condition = "ABNORMAL";
+        $condition = "STOPPED";
         $color     = "red";
     }
 

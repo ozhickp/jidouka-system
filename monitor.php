@@ -693,7 +693,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
     <div class="notification-item">
     <div><b>${machine.machine_name}</b></div>
     <div>Plant : ${machine.plant}</div>
-    <div>Status : <span class="text-danger fw-bold">ABNORMAL</span></div>
+    <div>Status : <span class="text-danger fw-bold">STOPPED</span></div>
     </div>
     `;
 
@@ -723,7 +723,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
             navbar.innerHTML =
                 "⚠ " + machine.machine_name +
                 " - Plant " + machine.plant +
-                " ABNORMAL";
+                " STOPPED";
 
         }
 
@@ -885,7 +885,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                 conveyorBtn.classList.remove("btn-danger", "btn-success");
                 conveyorBtn.classList.add("btn-secondary");
                 conveyorBtn.disabled = true;
-                conveyorBtn.title = "Conveyor dikunci: ada mesin abnormal";
+                conveyorBtn.title = "Conveyor dikunci: ada mesin stopped";
 
                 // Auto-stop ke database
                 fetch("set_conveyor.php", {

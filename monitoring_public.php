@@ -360,7 +360,7 @@
                             } else {
                                 card.classList.add('status-abnormal');
                                 statusDiv.outerHTML =
-                                    "<div class='status-badge abnormal'>ABNORMAL</div>";
+                                    "<div class='status-badge abnormal'>STOPPED</div>";
                                 abnormal++;
                             }
                         }

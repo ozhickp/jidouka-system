@@ -46,7 +46,7 @@ while ($row = $result->fetch_assoc()) {
         $status_text = "RUNNING";
         $badge = "success";
     } elseif ($row['status'] == 2) {
-        $status_text = "ABNORMAL";
+        $status_text = "STOPPED";
         $badge = "danger";
     } else {
         $status_text = "MAINTENANCE";

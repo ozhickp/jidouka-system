@@ -80,7 +80,7 @@ while ($row = $result->fetch_assoc()) {
     /* STATUS ABNORMAL */
     if ($row['status'] == 2) {
         $color = "danger";
-        $statusText = "ABNORMAL";
+        $statusText = "STOPPED";
 
         $button = "
         <button 

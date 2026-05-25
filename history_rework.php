@@ -2,10 +2,17 @@
 session_start();
 include 'config.php';
 
-if (!isset($_SESSION['user'])) {
+// Izinkan akses untuk user ATAU admin
+$is_user  = isset($_SESSION['user']);
+$is_admin = isset($_SESSION['admin_id']);
+
+if (!$is_user && !$is_admin) {
     header("Location: index.php");
     exit;
 }
+
+// Tentukan halaman kembali sesuai role
+$back_url = $is_admin ? "dashboard_admin.php" : "monitor.php";
 
 // Filter
 $plant_filter = isset($_GET['plant']) ? $_GET['plant'] : '';
@@ -181,7 +188,7 @@ function formatDuration($sec)
 
         <!-- HEADER -->
         <div class="page-header d-flex justify-content-between align-items-center mb-4">
-            <a href="monitor.php" class="btn btn-light btn-sm">← Back</a>
+            <a href="<?= $back_url ?>" class="btn btn-light btn-sm">← Back</a>
             <h4 class="m-0"><i class="fas fa-history me-2"></i>History Rework</h4>
             <div style="width:100px;"></div>
         </div>

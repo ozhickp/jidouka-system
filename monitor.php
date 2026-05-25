@@ -502,8 +502,17 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
         }
 
         function toggleSidebar() {
-            document.getElementById("sidebar").classList.toggle("collapsed");
+            const sidebar = document.getElementById("sidebar");
+            sidebar.classList.toggle("collapsed");
+            localStorage.setItem("sidebarCollapsed", sidebar.classList.contains("collapsed") ? "1" : "0");
         }
+
+        // Restore sidebar state on page load
+        (function() {
+            if (localStorage.getItem("sidebarCollapsed") === "1") {
+                document.getElementById("sidebar").classList.add("collapsed");
+            }
+        })();
 
         function toggleSound() {
 

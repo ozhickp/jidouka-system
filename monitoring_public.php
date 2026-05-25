@@ -60,11 +60,22 @@
         }
 
         #clock {
-            font-size: 15px;
-            font-weight: bold;
-            min-width: 90px;
             text-align: right;
-            letter-spacing: 1px;
+            line-height: 1.3;
+            min-width: 110px;
+        }
+
+        #clock .clock-date {
+            font-size: 20px;
+            /* font-weight: bold; */
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        #clock .clock-time {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
         }
 
         /* ── PLANT COLUMNS ── */
@@ -318,12 +329,20 @@
         // ── CLOCK ──
         function updateClock() {
             const now = new Date();
-            document.getElementById('clock').textContent =
-                now.toLocaleTimeString('id-ID', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
+            const dateStr = now.toLocaleDateString('id-ID', {
+                weekday: 'short',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+            const timeStr = now.toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('clock').innerHTML =
+                `<div class="clock-date">${dateStr}</div>` +
+                `<div class="clock-time">${timeStr}</div>`;
         }
         setInterval(updateClock, 1000);
         updateClock();

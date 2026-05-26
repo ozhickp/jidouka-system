@@ -232,6 +232,49 @@
             font-family: monospace;
         }
 
+        /* ── CONVEYOR STATUS ── */
+        .conveyor-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: 0;
+            white-space: nowrap;
+        }
+
+        .conveyor-status.conv-running {
+            background: #28a745;
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .conveyor-status.conv-stopped {
+            background: #dc3545;
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .conv-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .conv-running .conv-dot {
+            background: #28a745;
+        }
+
+        .conv-stopped .conv-dot {
+            background: #dc3545;
+            animation: blink 1s infinite;
+        }
+
         /* ── REFRESH INDICATOR ── */
         .footer {
             text-align: center;
@@ -313,7 +356,12 @@
                 <div class="plant-col <?= $cls ?>" id="col-<?= $slug ?>">
                     <div class="plant-header">
                         <span><?= $icon ?> <?= htmlspecialchars(ucwords($plant)) ?></span>
-                        <span class="plant-summary" id="summary-<?= $slug ?>">...</span>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                            <span class="plant-summary" id="summary-<?= $slug ?>">...</span>
+                            <span class="conveyor-status conv-running" id="conveyor-<?= $slug ?>">
+                                <span class="conv-dot"></span> Conveyor ON
+                            </span>
+                        </div>
                     </div>
                     <div class="machine_grid" id="grid-<?= $slug ?>">
                         <!-- diisi JS -->
@@ -419,6 +467,22 @@
 
         function loadAll() {
             plants.forEach(p => loadPlant(p));
+            plants.forEach(p => loadConveyor(p));
+        }
+
+        // ── LOAD STATUS CONVEYOR PER PLANT ──
+        function loadConveyor(plant) {
+            const slug = plant.replace(/\s+/g, '-').toLowerCase();
+            const el = document.getElementById('conveyor-' + slug);
+            if (!el) return;
+
+            fetch('get_conveyor_status.php?plant=' + encodeURIComponent(plant))
+                .then(r => r.json())
+                .then(data => {
+                    const running = parseInt(data.status) === 1;
+                    el.className = 'conveyor-status ' + (running ? 'conv-running' : 'conv-stopped');
+                    el.innerHTML = `<span class="conv-dot"></span> Conveyor ${running ? 'ON' : 'OFF'}`;
+                });
         }
 
         // ── STOPWATCH: update semua timer abnormal setiap detik ──

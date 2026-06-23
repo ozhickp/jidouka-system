@@ -12,6 +12,7 @@
     <title>MTC Monitoring System</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
         body {
@@ -88,6 +89,17 @@
             transform: scale(1.04);
         }
 
+        .btn-back {
+            background: #5f0f40;
+            color: white;
+            border: none;
+        }
+
+        .btn-back:hover {
+            background: #4a0b31;
+            transform: scale(1.04);
+        }
+
         .footer {
             margin-top: 20px;
             font-size: 13px;
@@ -146,6 +158,12 @@
         <a href="login_user.php">
             <button class="btn btn-main btn-login">
                 Employee Login
+            </button>
+        </a>
+
+        <a href="https://notif-alert.yadin.com">
+            <button class="btn btn-main btn-back">
+                <i class="bi bi-arrow-left"></i> Back to Maintenance Hub
             </button>
         </a>
 

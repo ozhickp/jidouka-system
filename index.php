@@ -161,7 +161,7 @@
             </button>
         </a>
 
-        <a href="https://notif-alert.yadin.com">
+        <a href="https://mainhub.yadin.com">
             <button class="btn btn-main btn-back">
                 <i class="bi bi-arrow-left"></i> Back to Maintenance Hub
             </button>

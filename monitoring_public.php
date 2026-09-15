@@ -137,28 +137,61 @@
         .machine_grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 8px;
-            padding: 10px;
+            grid-auto-rows: minmax(0, 1fr);
+            gap: 6px;
+            padding: 8px;
             overflow: hidden;
             /* tidak scroll */
-            align-content: start;
+            align-content: stretch;
             flex: 1;
             min-height: 0;
         }
 
-        /* Assembly punya 16 mesin → paksa 4 kolom agar muat */
+        /* Assembly punya 13 mesin dengan nama yang lebih panjang →
+           3 kolom (bukan 4) supaya tiap kartu punya ruang lebih lebar */
         .col-assembly .machine_grid {
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* Assembly punya paling banyak baris (5 baris) sehingga tiap
+           kartu jadi lebih pipih dibanding kolom lain - kecilkan
+           sedikit teks & rapatkan spasi khusus di kolom ini supaya
+           nama yang 2 baris (Process 10, 11, 13, dst) tidak mepet/
+           terpotong oleh badge status di bawahnya */
+        .col-assembly .machine_card {
+            padding: 4px 6px;
+        }
+
+        .col-assembly .machine-name {
+            font-size: 10.5px;
+            line-height: 1.15;
+            margin-bottom: 3px;
+        }
+
+        .col-assembly .status-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+        }
+
+        .col-assembly .maintenance_status {
+            font-size: 9px;
+            margin-top: 2px;
+            padding: 1px 5px;
         }
 
         /* ── MACHINE CARD ── */
         .machine_card {
             background: #2c3136;
             border-radius: 8px;
-            padding: 10px 8px;
+            padding: 6px 8px;
             text-align: center;
             border: 2px solid #444;
             transition: border-color .3s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+            min-height: 0;
         }
 
         .machine_card.status-running {
@@ -174,15 +207,19 @@
             font-size: 12px;
             font-weight: bold;
             color: #e9ecef;
-            margin-bottom: 6px;
-            white-space: nowrap;
+            margin-bottom: 4px;
+            white-space: normal;
+            word-wrap: break-word;
             overflow: hidden;
-            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.2;
         }
 
         .status-badge {
             display: inline-block;
-            padding: 3px 10px;
+            padding: 2px 8px;
             border-radius: 20px;
             font-size: 11px;
             font-weight: bold;
@@ -198,7 +235,7 @@
         }
 
         .maintenance_status {
-            margin-top: 5px;
+            margin-top: 3px;
             font-size: 10px;
             padding: 2px 6px;
             border-radius: 5px;
@@ -443,7 +480,11 @@
                         }
 
                         // Wrap machine name
-                        const nameDiv = card.querySelector('div[style*="font-size:20px"]');
+                        // (pakai regex, bukan attribute selector persis, supaya tidak
+                        // gagal kalau PHP menulis "font-size: 20px" dengan spasi)
+                        const nameDiv = Array.from(card.querySelectorAll('div')).find(
+                            d => /font-size:\s*20px/.test(d.getAttribute('style') || '')
+                        );
                         if (nameDiv) {
                             nameDiv.className = 'machine-name';
                             nameDiv.removeAttribute('style');

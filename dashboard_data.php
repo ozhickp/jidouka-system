@@ -102,14 +102,14 @@ while ($row = $result->fetch_assoc()) {
     }
 
     echo "
-    <div class='col-md-3'>
-        <div class='card text-center shadow mb-4 border-$color'>
+    <div class='col-md-3 mb-4'>
+        <div class='card machine-card text-center shadow h-100 border-$color'>
             <div class='card-body'>
-                <h5>" . htmlspecialchars($row['machine_name']) . "</h5>
+                <h5 class='machine-name'>" . htmlspecialchars($row['machine_name']) . "</h5>
                 <span class='badge bg-$color fs-6'>
                     $statusText
                 </span>
-                <div>$button</div>
+                <div class='machine-action'>$button</div>
             </div>
         </div>
     </div>

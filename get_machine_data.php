@@ -70,11 +70,11 @@ while ($row = $result->fetch_assoc()) {
 
     <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
 
-        <div class="card card-machine shadow">
+        <div class="card card-machine shadow h-100">
 
             <div class="card-body text-center">
 
-                <h5><?= htmlspecialchars($row['machine_name']); ?></h5>
+                <h5 class="machine-name"><?= htmlspecialchars($row['machine_name']); ?></h5>
 
                 <form method="POST" action="update_machine_status.php">
 

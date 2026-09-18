@@ -216,6 +216,40 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
             font-weight: bold;
             margin-left: 20px;
         }
+
+        /* ── KARTU MESIN ──
+           Nama process panjangnya tidak seragam (Process 1 - Body cuma
+           1 baris, Process 6 - Gear Idle, Cylinder Head 2 baris) dan
+           kartu STOPPED punya tombol tambahan, sehingga tinggi kartu
+           jadi beda-beda. Dua hal yang mengunci ini:
+           1. Nama SELALU dihitung setinggi 2 baris (min-height +
+              line-clamp), jadi badge status sejajar di semua kartu.
+           2. Kartu diregangkan setinggi kartu tertinggi di barisnya
+              (class h-100 di markup kartu + kolom .row yang stretch). */
+        .machine-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.3;
+            /* 2 baris x line-height, walau namanya cuma 1 baris */
+            min-height: 2.6em;
+            margin-bottom: .5rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Tombol "Konfirmasi Perbaikan" didorong ke bawah kartu supaya
+           posisinya sama di semua kartu yang statusnya STOPPED */
+        .machine-card .card-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .machine-card .machine-action {
+            margin-top: auto;
+        }
     </style>
 </head>
 
@@ -352,6 +386,13 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
             </div>
 
+            <div class="text-center mb-2" id="emergencyBanner" style="display:none;">
+                <span class="badge bg-danger fs-6 px-3 py-2">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    EMERGENCY STOP AKTIF - Conveyor tidak bisa dijalankan
+                </span>
+            </div>
+
             <div class="text-center mb-2" id="formReworkContainer" style="display:none;">
                 <button id="formReworkBtn" class="btn btn-primary">
                     Form Rework
@@ -434,6 +475,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
         let reworkMode = false;
         let reworkConfirmed = false;
         let formfilled = 0;
+        let emergencyActive = false;
 
         let navbarAlertIndex = 0;
         let navbarAlertList = [];
@@ -885,6 +927,24 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
             if (!conveyorBtn) return;
 
+            const banner = document.getElementById("emergencyBanner");
+
+            // Emergency SELALU menang, termasuk mengalahkan mode rework -
+            // ini soal keselamatan, bukan sekadar status mesin.
+            if (emergencyActive) {
+                if (banner) banner.style.display = "block";
+
+                conveyorStatus = 2;
+                conveyorBtn.innerText = "CONVEYOR OFF";
+                conveyorBtn.classList.remove("btn-danger", "btn-success");
+                conveyorBtn.classList.add("btn-secondary");
+                conveyorBtn.disabled = true;
+                conveyorBtn.title = "Conveyor dikunci: EMERGENCY STOP aktif";
+                return;
+            }
+
+            if (banner) banner.style.display = "none";
+
             const isAbnormal = hasAbnormalMachine();
 
             if (isAbnormal && !reworkMode) {
@@ -926,6 +986,9 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
         if (conveyorBtn) {
             conveyorBtn.addEventListener("click", function() {
 
+                // Emergency SELALU diblok, apapun mode-nya
+                if (emergencyActive) return;
+
                 // Double-check: jika ada abnormal & bukan rework, abaikan klik
                 if (hasAbnormalMachine() && !reworkMode) return;
 
@@ -959,8 +1022,16 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                 .then(res => res.json())
                 .then(data => {
                     conveyorStatus = parseInt(data.status) || 1;
-                    // Hanya update tombol jika data mesin sudah siap
-                    if (machineDataReady) updateConveyorButton();
+                    emergencyActive = parseInt(data.emergency_active) === 1;
+
+                    // Banner emergency & kunci tombol harus langsung terlihat
+                    // walau data mesin (machineDataReady) belum siap - ini soal
+                    // keselamatan, tidak boleh menunggu.
+                    if (emergencyActive) {
+                        updateConveyorButton();
+                    } else if (machineDataReady) {
+                        updateConveyorButton();
+                    }
                 });
         }
     </script>

@@ -97,6 +97,28 @@ $admin = $result_admin->fetch_assoc();
         .badge-alert {
             background: red;
         }
+
+        /* ── KARTU MESIN ──
+           Nama process panjangnya tidak seragam (Process 1 - Body cuma
+           1 baris, Process 6 - Gear Idle, Cylinder Head 2 baris) dan
+           kartu STOPPED punya tombol tambahan, sehingga tinggi kartu
+           jadi beda-beda. Dua hal yang mengunci ini:
+           1. Nama SELALU dihitung setinggi 2 baris (min-height +
+              line-clamp), jadi badge status sejajar di semua kartu.
+           2. Kartu diregangkan setinggi kartu tertinggi di barisnya
+              (class h-100 di markup kartu + kolom .row yang stretch). */
+        .machine-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.3;
+            /* 2 baris x line-height, walau namanya cuma 1 baris */
+            min-height: 2.6em;
+            margin-bottom: .5rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 

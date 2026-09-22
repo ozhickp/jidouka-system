@@ -14,10 +14,9 @@ if ($plant == 'assembly') {
     $id = (int)$plant; // fallback
 }
 
-$query = mysqli_query($conn, "SELECT status, emergency_active FROM conveyor WHERE id='$id'");
+$query = mysqli_query($conn, "SELECT status FROM conveyor WHERE id='$id'");
 $data = mysqli_fetch_assoc($query);
 
 echo json_encode([
-    "status" => $data['status'] ?? 1,
-    "emergency_active" => (int)($data['emergency_active'] ?? 0)
+    "status" => $data['status'] ?? 1
 ]);

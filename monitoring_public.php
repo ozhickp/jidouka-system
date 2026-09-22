@@ -565,6 +565,11 @@
             animation: blink 1s infinite;
         }
 
+        .emergency-symbol {
+            margin-left: 4px;
+            font-size: 12px;
+        }
+
         /* ── REFRESH INDICATOR ── */
         .footer {
             text-align: center;
@@ -721,6 +726,10 @@
         let mutedPlants = new Set();
         // daftar SEMUA mesin stopped per line (untuk info bergantian & badge)
         let plantStoppedList = {};
+        // status emergency per line (dari get_conveyor_status.php) - dipakai
+        // buat override tampilan SEMUA kartu mesin jadi merah/STOPPED, meniru
+        // lampu pilot fisik yang di-override merah oleh Raspi saat emergency
+        let plantEmergencyActive = {};
         // daftar mesin stopped yang statusnya "Belum Ditangani" & belum di-mute
         // (inilah yang benar-benar membunyikan alarm)
         let plantPendingAlarmList = {};
@@ -837,6 +846,15 @@
                 const colEl = document.getElementById('col-' + slug);
                 if (!infoEl) return;
 
+                // Emergency menang di atas rotasi nama mesin biasa - tampilkan
+                // pesan tetap, bukan bergantian per nama (semua proses kena).
+                if (plantEmergencyActive[slug]) {
+                    infoEl.style.display = 'block';
+                    if (colEl) colEl.classList.add('has-alert');
+                    infoEl.textContent = '🛑 EMERGENCY STOP AKTIF - Semua proses distop sementara';
+                    return;
+                }
+
                 const list = plantStoppedList[slug] || [];
                 if (list.length === 0) {
                     infoEl.style.display = 'none';
@@ -861,145 +879,174 @@
             const grid = document.getElementById('grid-' + slug);
             const sumEl = document.getElementById('summary-' + slug);
 
-            fetch('get_machine_data2.php?plant=' + encodeURIComponent(plant))
-                .then(r => r.text())
-                .then(html => {
-                    // Parse HTML dari server lalu rebuild kartu dengan class yang benar
-                    const tmp = document.createElement('div');
-                    tmp.innerHTML = html;
+            // Ambil status emergency line ini DULU - dipakai untuk override
+            // tampilan SEMUA kartu mesin jadi merah/STOPPED, meniru lampu
+            // pilot fisik yang di-override merah oleh Raspi. Ini MURNI
+            // tampilan; repair_status/maintenance_status di database TIDAK
+            // disentuh, jadi tidak memicu alur konfirmasi perbaikan apapun.
+            fetch('get_conveyor_status.php?plant=' + encodeURIComponent(plant))
+                .then(r => r.json())
+                .then(conveyorData => {
+                    const emergencyActive = parseInt(conveyorData.emergency_active) === 1;
+                    plantEmergencyActive[slug] = emergencyActive;
 
-                    const cards = tmp.querySelectorAll('.machine_card');
-                    let running = 0,
-                        abnormal = 0;
+                    return fetch('get_machine_data2.php?plant=' + encodeURIComponent(plant))
+                        .then(r => r.text())
+                        .then(html => {
+                            // Parse HTML dari server lalu rebuild kartu dengan class yang benar
+                            const tmp = document.createElement('div');
+                            tmp.innerHTML = html;
 
-                    // dikumpulkan ulang tiap refresh, dipakai untuk alarm line
-                    const stoppedNames = [];
-                    const pendingAlarmNames = [];
+                            const cards = tmp.querySelectorAll('.machine_card');
+                            let running = 0,
+                                abnormal = 0;
 
-                    cards.forEach(card => {
-                        // Wrap machine name lebih dulu supaya nama-nya bisa dipakai
-                        // untuk info alarm di bawah
-                        // (pakai regex, bukan attribute selector persis, supaya tidak
-                        // gagal kalau PHP menulis "font-size: 20px" dengan spasi)
-                        const nameDiv = Array.from(card.querySelectorAll('div')).find(
-                            d => /font-size:\s*20px/.test(d.getAttribute('style') || '')
-                        );
-                        let nameText = '';
-                        if (nameDiv) {
-                            nameText = nameDiv.textContent.trim();
-                            nameDiv.className = 'machine-name';
-                            nameDiv.removeAttribute('style');
-                        }
+                            // dikumpulkan ulang tiap refresh, dipakai untuk alarm line
+                            const stoppedNames = [];
+                            const pendingAlarmNames = [];
 
-                        // Baca status dari inline style warna yang diset get_machine_data2.php
-                        const statusDiv = card.querySelector('div[style*="color:"]');
-                        let isAbnormal = false;
-                        if (statusDiv) {
-                            const txt = statusDiv.textContent.trim().toUpperCase();
-                            if (txt === 'RUNNING') {
-                                card.classList.add('status-running');
-                                statusDiv.outerHTML =
-                                    "<div class='status-badge running'>RUNNING</div>";
-                                running++;
-                            } else {
-                                card.classList.add('status-abnormal');
-                                statusDiv.outerHTML =
-                                    "<div class='status-badge abnormal'>STOPPED</div>";
-                                abnormal++;
-                                isAbnormal = true;
-                            }
-                        }
+                            cards.forEach(card => {
+                                // Wrap machine name lebih dulu supaya nama-nya bisa dipakai
+                                // untuk info alarm di bawah
+                                // (pakai regex, bukan attribute selector persis, supaya tidak
+                                // gagal kalau PHP menulis "font-size: 20px" dengan spasi)
+                                const nameDiv = Array.from(card.querySelectorAll('div')).find(
+                                    d => /font-size:\s*20px/.test(d.getAttribute('style') || '')
+                                );
+                                let nameText = '';
+                                if (nameDiv) {
+                                    nameText = nameDiv.textContent.trim();
+                                    nameDiv.className = 'machine-name';
+                                    nameDiv.removeAttribute('style');
+                                }
 
-                        // Reclassify maintenance_status
-                        const maint = card.querySelector('.maintenance_status');
-                        let maintText = '';
-                        if (maint) {
-                            maintText = maint.textContent.trim();
-                            if (maintText === 'Clear') maint.classList.add('maint-clear');
-                            else if (maintText === 'Belum Ditangani') maint.classList.add('maint-pending');
-                            else if (maintText === 'Sedang Ditangani') maint.classList.add('maint-progress');
-                            maint.removeAttribute('style');
-                        }
+                                // Baca status ASLI dari inline style warna yang diset
+                                // get_machine_data2.php (repair_status sebenarnya)
+                                const statusDiv = card.querySelector('div[style*="color:"]');
+                                let realAbnormal = false;
+                                if (statusDiv) {
+                                    const txt = statusDiv.textContent.trim().toUpperCase();
+                                    realAbnormal = (txt !== 'RUNNING');
+                                }
 
-                        card.removeAttribute('style');
+                                // Tampilan badge mengikuti kondisi FISIK lampu: kalau
+                                // emergency aktif, SEMUA proses tampil merah/STOPPED
+                                // (meniru lampu pilot yang di-override merah semua oleh
+                                // Raspi), walau repair_status aslinya "done"/Clear.
+                                const displayAbnormal = emergencyActive || realAbnormal;
 
-                        // ── ALARM PER MESIN ──
-                        const machineKey = slug + '::' + nameText;
+                                if (statusDiv) {
+                                    if (displayAbnormal) {
+                                        card.classList.add('status-abnormal');
+                                        statusDiv.outerHTML =
+                                            "<div class='status-badge abnormal'>" +
+                                            (emergencyActive && !realAbnormal ? 'EMERGENCY' : 'STOPPED') +
+                                            "</div>";
+                                        abnormal++;
+                                    } else {
+                                        card.classList.add('status-running');
+                                        statusDiv.outerHTML =
+                                            "<div class='status-badge running'>RUNNING</div>";
+                                        running++;
+                                    }
+                                }
 
-                        if (isAbnormal) {
-                            stoppedNames.push(nameText);
+                                // Reclassify maintenance_status - TETAP apa adanya,
+                                // TIDAK di-override, sesuai kondisi asli mesin di DB
+                                const maint = card.querySelector('.maintenance_status');
+                                let maintText = '';
+                                if (maint) {
+                                    maintText = maint.textContent.trim();
+                                    if (maintText === 'Clear') maint.classList.add('maint-clear');
+                                    else if (maintText === 'Belum Ditangani') maint.classList.add('maint-pending');
+                                    else if (maintText === 'Sedang Ditangani') maint.classList.add('maint-progress');
+                                    maint.removeAttribute('style');
+                                }
 
-                            // Alarm cuma "hidup" selama status maintenance masih
-                            // "Belum Ditangani". Begitu masuk "Sedang Ditangani"
-                            // (progress) atau mesin sudah running lagi, alarm
-                            // otomatis berhenti & mute-nya di-reset.
-                            const isPending = (maintText === 'Belum Ditangani');
-                            if (!isPending) mutedMachines.delete(machineKey);
+                                card.removeAttribute('style');
 
-                            const isMuted = mutedMachines.has(machineKey);
-                            const alarmActive = isPending && !isMuted;
-                            if (alarmActive) pendingAlarmNames.push(nameText);
+                                // ── ALARM PER MESIN - berdasarkan kondisi ASLI mesin
+                                //    (realAbnormal), BUKAN override tampilan emergency.
+                                //    Kalau abnormal-nya cuma karena emergency, tidak ada
+                                //    bell/alarm sama sekali - murni tampilan. ──
+                                const machineKey = slug + '::' + nameText;
 
-                            const bellBtn = document.createElement('button');
-                            bellBtn.type = 'button';
-                            bellBtn.className = 'machine-alarm-btn' +
-                                (alarmActive ? ' alarm-active' :
-                                    (isPending && isMuted ? ' alarm-muted' : ' alarm-idle'));
-                            bellBtn.innerHTML = (isPending && isMuted) ? '🔕' : '🔔';
-                            bellBtn.title = isPending ?
-                                (isMuted ?
-                                    'Alarm mesin ini dibisukan - klik untuk aktifkan lagi' :
-                                    'Klik untuk membisukan alarm mesin ini') :
-                                'Sedang ditangani - alarm berhenti otomatis';
-                            // Catatan: card di sini masih di dalam DOM sementara (tmp),
-                            // jadi listener ditempel via delegasi memakai data-attribute,
-                            // bukan addEventListener langsung (hilang saat grid.innerHTML
-                            // di-set ulang dari HTML string di bawah).
-                            bellBtn.dataset.machineKey = machineKey;
+                                if (realAbnormal) {
+                                    stoppedNames.push(nameText);
 
-                            // Lonceng dimasukkan ke baris nama (.machine-head),
-                            // bukan ditumpuk absolute di pojok kartu, supaya
-                            // tidak pernah menindih badge STOPPED / timer.
-                            if (nameDiv && nameDiv.parentNode) {
-                                const head = document.createElement('div');
-                                head.className = 'machine-head';
-                                nameDiv.parentNode.insertBefore(head, nameDiv);
-                                head.appendChild(nameDiv);
-                                head.appendChild(bellBtn);
-                            } else {
-                                card.appendChild(bellBtn);
-                            }
-                        } else {
-                            // mesin sudah running lagi → reset mute-nya
-                            mutedMachines.delete(machineKey);
-                        }
-                    });
+                                    // Alarm cuma "hidup" selama status maintenance masih
+                                    // "Belum Ditangani". Begitu masuk "Sedang Ditangani"
+                                    // (progress) atau mesin sudah running lagi, alarm
+                                    // otomatis berhenti & mute-nya di-reset.
+                                    const isPending = (maintText === 'Belum Ditangani');
+                                    if (!isPending) mutedMachines.delete(machineKey);
 
-                    grid.innerHTML = tmp.querySelector('.machine_grid')?.innerHTML || html;
+                                    const isMuted = mutedMachines.has(machineKey);
+                                    const alarmActive = isPending && !isMuted;
+                                    if (alarmActive) pendingAlarmNames.push(nameText);
 
-                    // Pasang ulang klik listener tombol alarm per mesin
-                    // (harus setelah grid.innerHTML di-set, karena innerHTML
-                    // membuat elemen baru dan menghapus listener lama)
-                    grid.querySelectorAll('.machine-alarm-btn').forEach(btn => {
-                        const key = btn.dataset.machineKey;
-                        btn.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            unlockAlarmAudio();
-                            if (mutedMachines.has(key)) mutedMachines.delete(key);
-                            else mutedMachines.add(key);
-                            loadPlant(plant);
+                                    const bellBtn = document.createElement('button');
+                                    bellBtn.type = 'button';
+                                    bellBtn.className = 'machine-alarm-btn' +
+                                        (alarmActive ? ' alarm-active' :
+                                            (isPending && isMuted ? ' alarm-muted' : ' alarm-idle'));
+                                    bellBtn.innerHTML = (isPending && isMuted) ? '🔕' : '🔔';
+                                    bellBtn.title = isPending ?
+                                        (isMuted ?
+                                            'Alarm mesin ini dibisukan - klik untuk aktifkan lagi' :
+                                            'Klik untuk membisukan alarm mesin ini') :
+                                        'Sedang ditangani - alarm berhenti otomatis';
+                                    // Catatan: card di sini masih di dalam DOM sementara (tmp),
+                                    // jadi listener ditempel via delegasi memakai data-attribute,
+                                    // bukan addEventListener langsung (hilang saat grid.innerHTML
+                                    // di-set ulang dari HTML string di bawah).
+                                    bellBtn.dataset.machineKey = machineKey;
+
+                                    // Lonceng dimasukkan ke baris nama (.machine-head),
+                                    // bukan ditumpuk absolute di pojok kartu, supaya
+                                    // tidak pernah menindih badge STOPPED / timer.
+                                    if (nameDiv && nameDiv.parentNode) {
+                                        const head = document.createElement('div');
+                                        head.className = 'machine-head';
+                                        nameDiv.parentNode.insertBefore(head, nameDiv);
+                                        head.appendChild(nameDiv);
+                                        head.appendChild(bellBtn);
+                                    } else {
+                                        card.appendChild(bellBtn);
+                                    }
+                                } else {
+                                    // mesin sudah running lagi (atau abnormal cuma tampilan
+                                    // karena emergency) → reset mute-nya, tidak ada bell
+                                    mutedMachines.delete(machineKey);
+                                }
+                            });
+
+                            grid.innerHTML = tmp.querySelector('.machine_grid')?.innerHTML || html;
+
+                            // Pasang ulang klik listener tombol alarm per mesin
+                            // (harus setelah grid.innerHTML di-set, karena innerHTML
+                            // membuat elemen baru dan menghapus listener lama)
+                            grid.querySelectorAll('.machine-alarm-btn').forEach(btn => {
+                                const key = btn.dataset.machineKey;
+                                btn.addEventListener('click', function(e) {
+                                    e.stopPropagation();
+                                    unlockAlarmAudio();
+                                    if (mutedMachines.has(key)) mutedMachines.delete(key);
+                                    else mutedMachines.add(key);
+                                    loadPlant(plant);
+                                });
+                            });
+
+                            // Langsung tick agar timer tidak flash 00:00:00 saat refresh
+                            tickStopwatches();
+
+                            const total = running + abnormal;
+                            sumEl.textContent = total + ' mesin · ✅' + running + ' · ❌' + abnormal;
+
+                            plantStoppedList[slug] = stoppedNames;
+                            plantPendingAlarmList[slug] = pendingAlarmNames;
+                            updatePlantAlarmUI(slug);
                         });
-                    });
-
-                    // Langsung tick agar timer tidak flash 00:00:00 saat refresh
-                    tickStopwatches();
-
-                    const total = running + abnormal;
-                    sumEl.textContent = total + ' mesin · ✅' + running + ' · ❌' + abnormal;
-
-                    plantStoppedList[slug] = stoppedNames;
-                    plantPendingAlarmList[slug] = pendingAlarmNames;
-                    updatePlantAlarmUI(slug);
                 })
                 .catch(() => {
                     grid.innerHTML = '<div style="color:#f87171;padding:10px;font-size:12px;">Gagal memuat data</div>';
@@ -1021,8 +1068,14 @@
                 .then(r => r.json())
                 .then(data => {
                     const running = parseInt(data.status) === 1;
+                    const emergencyActive = parseInt(data.emergency_active) === 1;
+
                     el.className = 'conveyor-status ' + (running ? 'conv-running' : 'conv-stopped');
-                    el.innerHTML = `<span class="conv-dot"></span> Conveyor ${running ? 'ON' : 'OFF'}`;
+                    el.innerHTML =
+                        `<span class="conv-dot"></span> Conveyor ${running ? 'ON' : 'OFF'}` +
+                        (emergencyActive
+                            ? ' <span class="emergency-symbol" title="Emergency Stop aktif">🛑</span>'
+                            : '');
                 });
         }
 

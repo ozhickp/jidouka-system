@@ -373,6 +373,13 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                 Production Process Monitoring : <?= ucfirst($plant) ?>
             </h3>
 
+            <div class="text-center mb-1">
+                <small class="text-muted">
+                    Kondisi conveyor saat ini:
+                    <span id="conveyorStatusLabel" class="fw-bold">-</span>
+                </small>
+            </div>
+
             <div class="d-flex justify-content-center align-items-center gap-3 mb-3" style="flex-wrap: nowrap;">
 
 
@@ -381,16 +388,9 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                 </button>
 
                 <button id="onsw" class="btn btn-secondary px-4" style="min-width:160px;" disabled>
-                    CONVEYOR OFF
+                    START CONVEYOR
                 </button>
 
-            </div>
-
-            <div class="text-center mb-2" id="emergencyBanner" style="display:none;">
-                <span class="badge bg-danger fs-6 px-3 py-2">
-                    <i class="fas fa-triangle-exclamation"></i>
-                    EMERGENCY STOP AKTIF - Conveyor tidak bisa dijalankan
-                </span>
             </div>
 
             <div class="text-center mb-2" id="formReworkContainer" style="display:none;">
@@ -475,7 +475,6 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
         let reworkMode = false;
         let reworkConfirmed = false;
         let formfilled = 0;
-        let emergencyActive = false;
 
         let navbarAlertIndex = 0;
         let navbarAlertList = [];
@@ -909,9 +908,23 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
         // =======================
         // CONVEYOR CONTROL
+        //
+        // Tidak ada lagi on/off bebas dan tidak ada lagi emergency stop.
+        // Mekanisme sekarang meniru button fisik START CONVEYOR (XC4):
+        //   - Conveyor hanya bisa MULAI jalan kalau SEMUA 13 proses hijau
+        //     (all done) DAN tombol start ditekan - baik tombol fisik XC4
+        //     di line, maupun tombol "START CONVEYOR" di dashboard ini
+        //     (keduanya sama-sama cuma mengirim permintaan status=ON;
+        //     validasi "semua hijau" tetap final di service Raspi/PLC).
+        //   - Conveyor MATI OTOMATIS begitu ada 1 saja proses yang merah
+        //     (belum done) - operator tidak perlu dan tidak bisa mematikan
+        //     manual dari sini.
+        //   - Untuk menyalakan lagi setelah mati: proses yang trouble harus
+        //     diselesaikan lewat form maintenance (submit form -> hijau
+        //     lagi), baru tombol START CONVEYOR aktif lagi.
         // =======================
 
-        let conveyorStatus = 1; // default running
+        let conveyorStatus = 2; // default: belum jalan, menunggu start
 
         const conveyorBtn = document.getElementById("onsw");
 
@@ -922,92 +935,92 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
             );
         }
 
+        // ── Update label kondisi conveyor saat ini (selalu jujur, apapun
+        //    kondisi lock-nya) ──
+        function updateConveyorStatusLabel() {
+            const label = document.getElementById("conveyorStatusLabel");
+            if (!label) return;
+
+            if (conveyorStatus == 1) {
+                label.textContent = "ON";
+                label.className = "fw-bold text-success";
+            } else {
+                label.textContent = "OFF";
+                label.className = "fw-bold text-danger";
+            }
+        }
+
         // ── Update tampilan & status tombol conveyor ──
         function updateConveyorButton() {
 
             if (!conveyorBtn) return;
 
-            const banner = document.getElementById("emergencyBanner");
-
-            // Emergency SELALU menang, termasuk mengalahkan mode rework -
-            // ini soal keselamatan, bukan sekadar status mesin.
-            if (emergencyActive) {
-                if (banner) banner.style.display = "block";
-
-                conveyorStatus = 2;
-                conveyorBtn.innerText = "CONVEYOR OFF";
-                conveyorBtn.classList.remove("btn-danger", "btn-success");
-                conveyorBtn.classList.add("btn-secondary");
-                conveyorBtn.disabled = true;
-                conveyorBtn.title = "Conveyor dikunci: EMERGENCY STOP aktif";
-                return;
-            }
-
-            if (banner) banner.style.display = "none";
+            updateConveyorStatusLabel();
 
             const isAbnormal = hasAbnormalMachine();
 
             if (isAbnormal && !reworkMode) {
-                // Ada mesin abnormal & bukan mode rework → paksa stop & kunci tombol
+                // Ada mesin abnormal & bukan mode rework → paksa stop & kunci tombol.
+                // Tidak perlu request set_conveyor.php dari sini lagi - service
+                // Raspi sendiri yang memaksa conveyor.status = OFF di database
+                // begitu mendeteksi ada proses belum done, jadi tampilan cukup
+                // mengikuti status terbaru dari get_conveyor_status.php.
                 conveyorStatus = 2;
+                updateConveyorStatusLabel();
+
                 conveyorBtn.innerText = "CONVEYOR OFF";
                 conveyorBtn.classList.remove("btn-danger", "btn-success");
                 conveyorBtn.classList.add("btn-secondary");
                 conveyorBtn.disabled = true;
-                conveyorBtn.title = "Conveyor dikunci: ada mesin stopped";
+                conveyorBtn.title = "Conveyor terkunci: ada proses yang belum selesai (merah). " +
+                    "Selesaikan lewat form maintenance dulu.";
+                return;
+            }
 
-                // Auto-stop ke database
-                fetch("set_conveyor.php", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded"
-                    },
-                    body: `plant=${encodeURIComponent(currentPlant)}&status=2`
-                });
-
+            if (conveyorStatus == 1) {
+                // Sudah jalan → tombol tidak perlu diklik lagi, tidak ada
+                // aksi "matikan manual"
+                conveyorBtn.innerText = "CONVEYOR ON";
+                conveyorBtn.classList.remove("btn-danger", "btn-secondary");
+                conveyorBtn.classList.add("btn-success");
+                conveyorBtn.disabled = true;
+                conveyorBtn.title = "Conveyor sedang berjalan.";
             } else {
-                // Normal / rework → tombol bisa diklik
+                // Semua hijau, belum jalan → siap di-start
+                conveyorBtn.innerText = "START CONVEYOR";
+                conveyorBtn.classList.remove("btn-success", "btn-secondary");
+                conveyorBtn.classList.add("btn-danger");
                 conveyorBtn.disabled = false;
                 conveyorBtn.title = "";
-
-                if (conveyorStatus == 2) {
-                    conveyorBtn.innerText = "CONVEYOR ON";
-                    conveyorBtn.classList.remove("btn-danger", "btn-secondary");
-                    conveyorBtn.classList.add("btn-success");
-                } else {
-                    conveyorBtn.innerText = "CONVEYOR OFF";
-                    conveyorBtn.classList.remove("btn-success", "btn-secondary");
-                    conveyorBtn.classList.add("btn-danger");
-                }
             }
         }
 
-        // ── Klik tombol conveyor ──
+        // ── Klik tombol START CONVEYOR ──
         if (conveyorBtn) {
             conveyorBtn.addEventListener("click", function() {
 
-                // Emergency SELALU diblok, apapun mode-nya
-                if (emergencyActive) return;
-
-                // Double-check: jika ada abnormal & bukan rework, abaikan klik
+                // Guard di sisi tampilan: hanya boleh start kalau tidak ada
+                // mesin abnormal (atau sedang rework) dan conveyor memang
+                // belum jalan. Validasi final tetap di backend (set_conveyor.php
+                // / service Raspi) - sama seperti tombol fisik XC4 yang juga
+                // diinterlock di ladder PLC.
                 if (hasAbnormalMachine() && !reworkMode) return;
-
-                let newStatus = (conveyorStatus == 1) ? 2 : 1;
+                if (conveyorStatus == 1) return;
 
                 fetch("set_conveyor.php", {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/x-www-form-urlencoded"
                         },
-                        body: `plant=${encodeURIComponent(currentPlant)}&status=${newStatus}`
+                        body: `plant=${encodeURIComponent(currentPlant)}&status=1`
                     })
                     .then(res => res.json())
                     .then(data => {
                         if (data.status === "success") {
-                            conveyorStatus = newStatus;
+                            conveyorStatus = 1;
                             updateConveyorButton();
                         } else {
-                            alert("Gagal update conveyor");
+                            alert("Gagal start conveyor");
                         }
                     });
             });
@@ -1021,15 +1034,9 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
             fetch("get_conveyor_status.php?plant=" + encodeURIComponent(currentPlant))
                 .then(res => res.json())
                 .then(data => {
-                    conveyorStatus = parseInt(data.status) || 1;
-                    emergencyActive = parseInt(data.emergency_active) === 1;
+                    conveyorStatus = parseInt(data.status) || 2;
 
-                    // Banner emergency & kunci tombol harus langsung terlihat
-                    // walau data mesin (machineDataReady) belum siap - ini soal
-                    // keselamatan, tidak boleh menunggu.
-                    if (emergencyActive) {
-                        updateConveyorButton();
-                    } else if (machineDataReady) {
+                    if (machineDataReady) {
                         updateConveyorButton();
                     }
                 });

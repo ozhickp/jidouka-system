@@ -1,5 +1,6 @@
 <?php
 include 'config.php';
+include_once 'conveyor_guard.php';
 
 header("Content-Type: application/json");
 
@@ -21,6 +22,12 @@ if ($plant == 'assembly') {
     $id = 3;
 } else {
     echo json_encode(["status" => "error", "message" => "Plant tidak ditemukan"]);
+    exit;
+}
+
+// Tolak START kalau masih ada proses merah/kuning (kecuali rework mode)
+if ($status === 1 && !conveyor_start_allowed($conn, $plant)) {
+    echo json_encode(["status" => "error", "message" => "Masih ada proses yang belum selesai"]);
     exit;
 }
 

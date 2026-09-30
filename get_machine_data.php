@@ -14,6 +14,31 @@ $stmt->bind_param("s", $plant);
 $stmt->execute();
 $result = $stmt->get_result();
 
+/* ================= LOGIKA LAMPU (SAMA DENGAN PILOT LAMP FISIK) =================
+   - Semua proses 'done'           -> semua HIJAU
+   - Ada proses belum 'done'       -> hanya proses bermasalah yang menyala:
+                                        pending  = MERAH
+                                        progress = KUNING
+                                      proses lain = OFF (bukan hijau, bukan merah)
+*/
+$rows = $result->fetch_all(MYSQLI_ASSOC);
+
+$line_has_problem = false;
+foreach ($rows as $r) {
+    if ($r['repair_status'] !== 'done') {
+        $line_has_problem = true;
+        break;
+    }
+}
+
+function lamp_state($repair_status, $line_has_problem)
+{
+    if (!$line_has_problem)            return 'green';
+    if ($repair_status === 'pending')  return 'red';
+    if ($repair_status === 'progress') return 'yellow';
+    return 'off';
+}
+
 
 /* ================= JSON MODE (UNTUK monitor.php) ================= */
 
@@ -21,14 +46,16 @@ if ($format === "json") {
 
     $machines = [];
 
-    while ($row = $result->fetch_assoc()) {
+    foreach ($rows as $row) {
 
         $machines[] = [
             "id" => $row['id'],
             "machine_name" => $row['machine_name'],
             "plant" => $row['plant'],
             "status" => $row['status'],
-            "repair_status" => $row['repair_status']
+            "repair_status" => $row['repair_status'],
+            "lamp" => lamp_state($row['repair_status'], $line_has_problem),
+            "line_has_problem" => $line_has_problem
         ];
     }
 
@@ -40,9 +67,15 @@ if ($format === "json") {
 
 /* ================= HTML MODE (UNTUK dashboard_admin.php) ================= */
 
-while ($row = $result->fetch_assoc()) {
+foreach ($rows as $row) {
 
-    if ($row['status'] == 1) {
+    $lamp = lamp_state($row['repair_status'], $line_has_problem);
+
+    if ($lamp === 'off') {
+        // Proses normal tapi line sedang ada masalah -> lampu mati
+        $status_text = "OFF";
+        $badge = "secondary";
+    } elseif ($row['status'] == 1) {
         $status_text = "RUNNING";
         $badge = "success";
     } elseif ($row['status'] == 2) {
@@ -53,7 +86,10 @@ while ($row = $result->fetch_assoc()) {
         $badge = "warning";
     }
 
-    if ($row['repair_status'] == "pending") {
+    if ($lamp === 'off') {
+        $repair_text = "-";
+        $repair_badge = "secondary";
+    } elseif ($row['repair_status'] == "pending") {
         $repair_text = "Belum Ditangani";
         $repair_badge = "danger";
     } elseif ($row['repair_status'] == "progress") {

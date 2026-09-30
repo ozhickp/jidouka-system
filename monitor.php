@@ -978,49 +978,47 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
             }
 
             if (conveyorStatus == 1) {
-                // Sudah jalan → tombol tidak perlu diklik lagi, tidak ada
-                // aksi "matikan manual"
+                // Sudah jalan, tapi semua hijau -> tetap boleh dimatikan manual
+                conveyorBtn.innerText = "CONVEYOR OFF";
+                conveyorBtn.classList.remove("btn-success", "btn-secondary");
+                conveyorBtn.classList.add("btn-danger");
+                conveyorBtn.disabled = false;
+                conveyorBtn.title = "";
+            } else {
+                // Semua hijau, belum jalan -> boleh dinyalakan manual
                 conveyorBtn.innerText = "CONVEYOR ON";
                 conveyorBtn.classList.remove("btn-danger", "btn-secondary");
                 conveyorBtn.classList.add("btn-success");
-                conveyorBtn.disabled = true;
-                conveyorBtn.title = "Conveyor sedang berjalan.";
-            } else {
-                // Semua hijau, belum jalan → siap di-start
-                conveyorBtn.innerText = "START CONVEYOR";
-                conveyorBtn.classList.remove("btn-success", "btn-secondary");
-                conveyorBtn.classList.add("btn-danger");
                 conveyorBtn.disabled = false;
                 conveyorBtn.title = "";
             }
         }
 
-        // ── Klik tombol START CONVEYOR ──
+        // ── Klik tombol conveyor (toggle bebas selama semua proses hijau) ──
         if (conveyorBtn) {
             conveyorBtn.addEventListener("click", function() {
 
-                // Guard di sisi tampilan: hanya boleh start kalau tidak ada
-                // mesin abnormal (atau sedang rework) dan conveyor memang
-                // belum jalan. Validasi final tetap di backend (set_conveyor.php
-                // / service Raspi) - sama seperti tombol fisik XC4 yang juga
-                // diinterlock di ladder PLC.
+                // Guard di sisi tampilan: tetap diblok kalau ada mesin
+                // abnormal (kecuali mode rework). Validasi final tetap di
+                // backend (set_conveyor.php / conveyor_guard.php).
                 if (hasAbnormalMachine() && !reworkMode) return;
-                if (conveyorStatus == 1) return;
+
+                const newStatus = (conveyorStatus == 1) ? 2 : 1;
 
                 fetch("set_conveyor.php", {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/x-www-form-urlencoded"
                         },
-                        body: `plant=${encodeURIComponent(currentPlant)}&status=1`
+                        body: `plant=${encodeURIComponent(currentPlant)}&status=${newStatus}`
                     })
                     .then(res => res.json())
                     .then(data => {
                         if (data.status === "success") {
-                            conveyorStatus = 1;
+                            conveyorStatus = newStatus;
                             updateConveyorButton();
                         } else {
-                            alert("Gagal start conveyor");
+                            alert("Gagal update conveyor");
                         }
                     });
             });

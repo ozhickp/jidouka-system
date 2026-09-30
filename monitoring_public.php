@@ -436,6 +436,12 @@
             background: #3a1f1f;
         }
 
+        /* Proses normal saat line sedang ada masalah = lampu mati (OFF) */
+        .machine_card.status-off {
+            border-color: #6c757d;
+            opacity: .6;
+        }
+
         .machine-name {
             font-size: 12px;
             font-weight: bold;
@@ -473,6 +479,10 @@
 
         .status-badge.abnormal {
             background: #dc3545;
+        }
+
+        .status-badge.off {
+            background: #6c757d;
         }
 
         .maintenance_status {
@@ -899,7 +909,18 @@
 
                             const cards = tmp.querySelectorAll('.machine_card');
                             let running = 0,
-                                abnormal = 0;
+                                abnormal = 0,
+                                off = 0;
+
+                            // Line bermasalah = emergency aktif ATAU ada minimal 1 proses
+                            // yang bukan RUNNING. Selama itu, proses yang normal
+                            // ditampilkan OFF (mati), bukan hijau - meniru pilot lamp fisik.
+                            const lineHasProblem = emergencyActive || Array.from(cards).some(c => {
+                                const sd = Array.from(c.querySelectorAll('div[style*="color:"]')).find(
+                                    d => !/font-size:\s*20px/.test(d.getAttribute('style') || '')
+                                );
+                                return sd && sd.textContent.trim().toUpperCase() !== 'RUNNING';
+                            });
 
                             // dikumpulkan ulang tiap refresh, dipakai untuk alarm line
                             const stoppedNames = [];
@@ -943,6 +964,11 @@
                                             (emergencyActive && !realAbnormal ? 'EMERGENCY' : 'STOPPED') +
                                             "</div>";
                                         abnormal++;
+                                    } else if (lineHasProblem) {
+                                        card.classList.add('status-off');
+                                        statusDiv.outerHTML =
+                                            "<div class='status-badge off'>OFF</div>";
+                                        off++;
                                     } else {
                                         card.classList.add('status-running');
                                         statusDiv.outerHTML =
@@ -1040,8 +1066,9 @@
                             // Langsung tick agar timer tidak flash 00:00:00 saat refresh
                             tickStopwatches();
 
-                            const total = running + abnormal;
-                            sumEl.textContent = total + ' mesin · ✅' + running + ' · ❌' + abnormal;
+                            const total = running + abnormal + off;
+                            sumEl.textContent = total + ' mesin · ✅' + running + ' · ❌' + abnormal +
+                                (off > 0 ? ' · ⚫' + off : '');
 
                             plantStoppedList[slug] = stoppedNames;
                             plantPendingAlarmList[slug] = pendingAlarmNames;
@@ -1073,9 +1100,9 @@
                     el.className = 'conveyor-status ' + (running ? 'conv-running' : 'conv-stopped');
                     el.innerHTML =
                         `<span class="conv-dot"></span> Conveyor ${running ? 'ON' : 'OFF'}` +
-                        (emergencyActive
-                            ? ' <span class="emergency-symbol" title="Emergency Stop aktif">🛑</span>'
-                            : '');
+                        (emergencyActive ?
+                            ' <span class="emergency-symbol" title="Emergency Stop aktif">🛑</span>' :
+                            '');
                 });
         }
 

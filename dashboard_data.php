@@ -1,5 +1,6 @@
 <?php
 include 'config.php';
+include_once 'conveyor_guard.php';
 
 /* =========================
    AMBIL PLANT DARI URL
@@ -23,29 +24,13 @@ $cekAbnormal = $stmt->get_result()->fetch_assoc();
    (status dikontrol manual via tombol, tidak di-override otomatis)
 =========================*/
 
-$plant_id = 1; // default
-
-if ($plant == "assembly") {
-    $plant_id = 1;
-} elseif ($plant == "test run") {
-    $plant_id = 2;
-} elseif ($plant == "packing") {
-    $plant_id = 3;
-}
-
-$stmt = $conn->prepare("
-    SELECT status 
-    FROM conveyor 
-    WHERE id=?
-");
-$stmt->bind_param("i", $plant_id);
-$stmt->execute();
-$conveyor = $stmt->get_result()->fetch_assoc();
+// Status efektif: otomatis OFF kalau ada proses merah/kuning (lihat conveyor_guard.php)
+$conveyor_status = enforce_conveyor_stop($conn, $plant);
 
 /* =========================
    TAMPILKAN STATUS CONVEYOR
 =========================*/
-if ($conveyor && $conveyor['status'] == 1) {
+if ($conveyor_status == 1) {
     echo "
     <div class='alert alert-success text-center'>
         🟢 Conveyor Plant $plant RUNNING
@@ -70,12 +55,31 @@ $stmt = $conn->prepare("
 $stmt->bind_param("s", $plant);
 $stmt->execute();
 $result = $stmt->get_result();
+$rows = $result->fetch_all(MYSQLI_ASSOC);
 
-while ($row = $result->fetch_assoc()) {
+/* Line dianggap bermasalah kalau ada 1 saja proses yang bukan RUNNING
+   (status 2 = merah/stopped, status 3 = kuning/maintenance).
+   Saat itu, proses yang normal ditampilkan OFF (mati), bukan hijau -
+   sama seperti pilot lamp fisik di line. */
+$line_has_problem = false;
+foreach ($rows as $r) {
+    if ($r['status'] != 1) {
+        $line_has_problem = true;
+        break;
+    }
+}
+
+foreach ($rows as $row) {
 
     $color = "success";
     $statusText = "RUNNING";
     $button = "";
+
+    /* PROSES NORMAL TAPI LINE SEDANG ADA MASALAH -> OFF */
+    if ($row['status'] == 1 && $line_has_problem) {
+        $color = "secondary";
+        $statusText = "OFF";
+    }
 
     /* STATUS ABNORMAL */
     if ($row['status'] == 2) {

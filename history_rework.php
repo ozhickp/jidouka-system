@@ -11,8 +11,21 @@ if (!$is_user && !$is_admin) {
     exit;
 }
 
-// Tentukan halaman kembali sesuai role
-$back_url = $is_admin ? "dashboard_admin.php" : "monitor.php";
+// Tentukan halaman kembali.
+// Prioritas: parameter ?from= -> referer -> session.
+// (Tidak hanya cek session admin, karena session admin & user bisa aktif bersamaan di browser yang sama)
+$from = $_GET['from'] ?? '';
+if (!in_array($from, ['user', 'admin'], true)) {
+    $ref = basename(parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_PATH) ?? '');
+    if ($ref === 'dashboard_admin.php')  $from = 'admin';
+    elseif ($ref === 'monitor.php')      $from = 'user';
+    else                                 $from = $is_user ? 'user' : 'admin';
+}
+// Pastikan role yang dipilih memang punya session
+if ($from === 'admin' && !$is_admin) $from = 'user';
+if ($from === 'user'  && !$is_user)  $from = 'admin';
+
+$back_url = ($from === 'admin') ? "dashboard_admin.php" : "monitor.php";
 
 // Filter
 $plant_filter = isset($_GET['plant']) ? $_GET['plant'] : '';
@@ -196,6 +209,7 @@ function formatDuration($sec)
         <!-- FILTER -->
         <div class="card p-4 mb-4">
             <form method="GET" class="row g-3 align-items-end">
+                <input type="hidden" name="from" value="<?= htmlspecialchars($from) ?>">
                 <div class="col-md-3">
                     <label class="form-label fw-semibold">Plant</label>
                     <select name="plant" class="form-select">
@@ -217,7 +231,7 @@ function formatDuration($sec)
                     <button type="submit" class="btn btn-warning w-100">
                         <i class="fas fa-search me-1"></i> Filter
                     </button>
-                    <a href="history_rework.php" class="btn btn-outline-secondary w-100">Reset</a>
+                    <a href="history_rework.php?from=<?= urlencode($from) ?>" class="btn btn-outline-secondary w-100">Reset</a>
                 </div>
             </form>
         </div>
@@ -334,4 +348,4 @@ function formatDuration($sec)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
-</html>
+</html> 

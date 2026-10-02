@@ -104,10 +104,10 @@ if (!isset($_SESSION['user'])) {
             font-size: 11px;
         }
 
-        .table th:nth-child(8),
-        .table td:nth-child(8),
-        .table th:nth-child(9),
-        .table td:nth-child(9) {
+        .table th:nth-child(10),
+        .table td:nth-child(10),
+        .table th:nth-child(11),
+        .table td:nth-child(11) {
             width: 90px;
         }
 
@@ -244,6 +244,8 @@ if (!isset($_SESSION['user'])) {
                             <th>Plant</th>
                             <th>Machine Problem</th>
                             <th>Machine Action</th>
+                            <th>Engine Type</th>
+                            <th>Serial Number</th>
                             <th>Engine Problem</th>
                             <th>Engine Action</th>
                             <th>Documentation Machine</th>
@@ -266,7 +268,7 @@ if (!isset($_SESSION['user'])) {
 
                         <tr>
 
-                            <td colspan="14">
+                            <td colspan="16">
                                 TOTAL
                             </td>
 

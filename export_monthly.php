@@ -16,7 +16,7 @@ if ($bulan == "") die("Pilih bulan terlebih dahulu.");
 /* QUERY DATA */
 $query = "
 SELECT 
-    m.machine_name, m.plant,
+    m.machine_name, m.plant, e.engine_name,
     l.*,
     dl.downtime_start, dl.downtime_end
 FROM maintenance_logs l
@@ -35,8 +35,8 @@ $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle("Monthly Report");
 
 /* SET WIDTH KOLOM GAMBAR */
-$sheet->getColumnDimension('H')->setWidth(25);
-$sheet->getColumnDimension('I')->setWidth(25);
+$sheet->getColumnDimension('J')->setWidth(25);
+$sheet->getColumnDimension('K')->setWidth(25);
 
 /* LOGO */
 $logo = new Drawing();
@@ -47,12 +47,12 @@ $logo->setCoordinates('A1');
 $logo->setWorksheet($sheet);
 
 /* TITLE */
-$sheet->mergeCells('A1:P1');
+$sheet->mergeCells('A1:R1');
 $sheet->setCellValue('A1', 'HISTORY MAINTENANCE REPORT');
 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-$sheet->mergeCells('A2:P2');
+$sheet->mergeCells('A2:R2');
 $sheet->setCellValue('A2', 'Bulan : ' . $bulan);
 $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
@@ -63,6 +63,8 @@ $header = [
     'Plant',
     'Machine Problem',
     'Machine Action',
+    'Engine Type',
+    'Serial Number',
     'Engine Problem',
     'Engine Action',
     'Documentation Machine',
@@ -78,7 +80,7 @@ $header = [
 
 $sheet->fromArray($header, NULL, 'A4');
 
-$sheet->getStyle('A4:P4')->applyFromArray([
+$sheet->getStyle('A4:R4')->applyFromArray([
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '198754']],
     'alignment' => [
@@ -113,6 +115,8 @@ while ($data = $result->fetch_assoc()) {
         $data['plant'],
         $data['kerusakan_machine'] ?: '-',
         $data['perbaikan_machine'] ?: '-',
+        $data['engine_name'] ?: '-',
+        $data['engine_serial'] ?: '-',
         $data['kerusakan_engine'] ?: '-',
         $data['perbaikan_engine'] ?: '-',
         '',
@@ -127,7 +131,7 @@ while ($data = $result->fetch_assoc()) {
     ], NULL, "A$row");
 
     /* FORMAT DATETIME */
-    $sheet->getStyle("K$row:N$row")->getNumberFormat()->setFormatCode('yyyy-mm-dd hh:mm:ss');
+    $sheet->getStyle("M$row:P$row")->getNumberFormat()->setFormatCode('yyyy-mm-dd hh:mm:ss');
 
     /* GAMBAR MACHINE */
     if (!empty($data['dokumentasi_machine'])) {
@@ -139,7 +143,7 @@ while ($data = $result->fetch_assoc()) {
             $drawing = new Drawing();
             $drawing->setPath($imgPath);
             $drawing->setHeight(70);
-            $drawing->setCoordinates("H$row");
+            $drawing->setCoordinates("J$row");
             $drawing->setOffsetX(15);
             $drawing->setOffsetY(5);
             $drawing->setWorksheet($sheet);
@@ -156,7 +160,7 @@ while ($data = $result->fetch_assoc()) {
             $drawing = new Drawing();
             $drawing->setPath($imgPath);
             $drawing->setHeight(70);
-            $drawing->setCoordinates("I$row");
+            $drawing->setCoordinates("K$row");
             $drawing->setOffsetX(15);
             $drawing->setOffsetY(5);
             $drawing->setWorksheet($sheet);
@@ -167,15 +171,15 @@ while ($data = $result->fetch_assoc()) {
 }
 
 /* AUTO SIZE KOLOM */
-foreach (range('A', 'P') as $col) {
+foreach (range('A', 'R') as $col) {
 
-    if (!in_array($col, ['H', 'I'])) {
+    if (!in_array($col, ['J', 'K'])) {
         $sheet->getColumnDimension($col)->setAutoSize(true);
     }
 }
 
 /* ALIGNMENT */
-$sheet->getStyle("A4:P" . ($row - 1))->applyFromArray([
+$sheet->getStyle("A4:R" . ($row - 1))->applyFromArray([
     'alignment' => [
         'horizontal' => Alignment::HORIZONTAL_CENTER,
         'vertical' => Alignment::VERTICAL_CENTER,
@@ -184,7 +188,7 @@ $sheet->getStyle("A4:P" . ($row - 1))->applyFromArray([
 ]);
 
 /* BORDER */
-$sheet->getStyle("A4:P" . ($row - 1))->applyFromArray([
+$sheet->getStyle("A4:R" . ($row - 1))->applyFromArray([
     'borders' => [
         'allBorders' => [
             'borderStyle' => Border::BORDER_THIN

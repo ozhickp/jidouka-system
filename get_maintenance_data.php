@@ -83,6 +83,8 @@ while ($row = $result->fetch_assoc()) {
     $html .= "<td>{$row['plant']}</td>";
     $html .= "<td class='text-limit'>" . ($row['kerusakan_machine'] ?: '-') . "</td>";
     $html .= "<td class='text-limit'>" . ($row['perbaikan_machine'] ?: '-') . "</td>";
+    $html .= "<td>" . ($row['engine_name'] ? htmlspecialchars($row['engine_name']) : '-') . "</td>";
+    $html .= "<td>" . ($row['engine_serial'] ? htmlspecialchars($row['engine_serial']) : '-') . "</td>";
     $html .= "<td class='text-limit'>" . ($row['kerusakan_engine'] ?: '-') . "</td>";
     $html .= "<td class='text-limit'>" . ($row['perbaikan_engine'] ?: '-') . "</td>";
 

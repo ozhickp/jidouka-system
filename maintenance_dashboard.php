@@ -26,6 +26,42 @@ $wherePlant    = $selectedPlant !== 'all'
     ? "WHERE m.plant = '" . mysqli_real_escape_string($conn, $selectedPlant) . "'"
     : "";
 
+// ── Filter bulan & tahun ──
+$monthNames = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+$selectedMonth = isset($_GET['month']) ? (int)$_GET['month'] : 0;
+$selectedYear  = isset($_GET['year'])  ? (int)$_GET['year']  : 0;
+if ($selectedMonth < 1 || $selectedMonth > 12) $selectedMonth = 0;
+if ($selectedMonth > 0 && $selectedYear === 0) $selectedYear = (int)date('Y'); // pilih bulan tanpa tahun -> tahun ini
+
+// Daftar tahun yang tersedia dari data downtime
+$years = [];
+$yr = mysqli_query($conn, "SELECT DISTINCT YEAR(downtime_start) AS y FROM downtime_logs WHERE downtime_start IS NOT NULL ORDER BY y DESC");
+while ($y = mysqli_fetch_assoc($yr)) $years[] = (int)$y['y'];
+if ($selectedYear > 0 && !in_array($selectedYear, $years)) {
+    $years[] = $selectedYear;
+    rsort($years);
+}
+
+// Rentang tanggal [start, end) — nilai sudah int, aman dari injection
+$dlRange = '';   // untuk downtime_logs
+$mlRange = '';   // untuk maintenance_logs
+$periodHours = 720; // default lama (30 hari) saat tidak ada filter periode
+if ($selectedYear > 0) {
+    $start = $selectedMonth > 0
+        ? new DateTime(sprintf('%04d-%02d-01', $selectedYear, $selectedMonth))
+        : new DateTime(sprintf('%04d-01-01', $selectedYear));
+    $end = (clone $start)->modify($selectedMonth > 0 ? '+1 month' : '+1 year');
+    $s = $start->format('Y-m-d');
+    $e = $end->format('Y-m-d');
+    $dlRange = "AND dl.downtime_start >= '$s' AND dl.downtime_start < '$e'";
+    $mlRange = "AND ml.waktu_mulai >= '$s' AND ml.waktu_mulai < '$e'";
+    $periodHours = (int)$start->diff($end)->days * 24; // jam operasional periode (untuk MTBF)
+}
+$whereHist = $wherePlant !== ''
+    ? $wherePlant . " " . $dlRange
+    : ($dlRange !== '' ? "WHERE 1=1 " . $dlRange : "");
+
 // 1. Downtime per machine
 $downtime = mysqli_query($conn, "
     SELECT m.machine_name as machine,
@@ -33,7 +69,7 @@ $downtime = mysqli_query($conn, "
            COUNT(dl.id) as breakdown
     FROM machine m
     LEFT JOIN maintenance_logs ml ON ml.machine_id = m.id
-    LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = ml.id
+    LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = ml.id $dlRange
     $wherePlant
     GROUP BY m.machine_name
     ORDER BY total_downtime DESC
@@ -46,7 +82,7 @@ $top = mysqli_query($conn, "
     SELECT m.machine_name as machine, COUNT(dl.id) as total
     FROM machine m
     LEFT JOIN maintenance_logs ml ON ml.machine_id = m.id
-    LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = ml.id
+    LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = ml.id $dlRange
     $wherePlant
     GROUP BY m.machine_name
     ORDER BY total DESC
@@ -61,14 +97,14 @@ $mttr = mysqli_query($conn, "
            SUM(TIMESTAMPDIFF(MINUTE, ml.waktu_mulai, ml.waktu_selesai)) as total_repair,
            COUNT(ml.id) as repair_count
     FROM machine m
-    LEFT JOIN maintenance_logs ml ON ml.machine_id = m.id
+    LEFT JOIN maintenance_logs ml ON ml.machine_id = m.id $mlRange
     $wherePlant
     GROUP BY m.machine_name
 ");
 $mttrRows = [];
 while ($r = mysqli_fetch_assoc($mttr)) {
     $mv = $r['repair_count'] > 0 ? $r['total_repair'] / $r['repair_count'] : 0;
-    $mb = $r['repair_count'] > 0 ? (720 / $r['repair_count']) : 720;
+    $mb = $r['repair_count'] > 0 ? ($periodHours / $r['repair_count']) : $periodHours;
     $av = round(($mb / ($mb + ($mv / 60))) * 100, 2);
     $mttrRows[] = [
         'machine'      => $r['machine'],
@@ -87,7 +123,7 @@ $history = mysqli_query($conn, "
     FROM downtime_logs dl
     LEFT JOIN maintenance_logs ml ON ml.id = dl.maintenance_logs_id
     LEFT JOIN machine m ON m.id = ml.machine_id
-    $wherePlant
+    $whereHist
     ORDER BY dl.downtime_start DESC
     LIMIT 8
 ");
@@ -415,7 +451,19 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
     <div class="topbar">
         <div class="brand">Maintenance <em>Performance</em> Dashboard</div>
         <div class="topbar-right">
-            <form method="get" style="margin:0">
+            <form method="get" style="margin:0; display:flex; gap:8px">
+                <select name="month" class="plant-sel" onchange="this.form.submit()">
+                    <option value="0" <?= $selectedMonth === 0 ? 'selected' : '' ?>>Semua Bulan</option>
+                    <?php foreach ($monthNames as $num => $name): ?>
+                        <option value="<?= $num ?>" <?= $selectedMonth === $num ? 'selected' : '' ?>><?= $name ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <select name="year" class="plant-sel" onchange="this.form.submit()">
+                    <option value="0" <?= $selectedYear === 0 ? 'selected' : '' ?>>Semua Tahun</option>
+                    <?php foreach ($years as $yv): ?>
+                        <option value="<?= $yv ?>" <?= $selectedYear === $yv ? 'selected' : '' ?>><?= $yv ?></option>
+                    <?php endforeach; ?>
+                </select>
                 <select name="plant" class="plant-sel" onchange="this.form.submit()">
                     <option value="all" <?= $selectedPlant == 'all' ? 'selected' : '' ?>>All Plants</option>
                     <?php foreach ($plants as $p): ?>

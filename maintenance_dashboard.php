@@ -85,6 +85,7 @@ $top = mysqli_query($conn, "
     LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = ml.id $dlRange
     $wherePlant
     GROUP BY m.machine_name
+    HAVING total > 0
     ORDER BY total DESC
     LIMIT 5
 ");
@@ -340,9 +341,12 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
         .av-list {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
             flex: 1;
-            overflow: hidden;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 4px;
         }
 
         .av-row {
@@ -350,17 +354,17 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
             align-items: center;
             gap: 6px;
             min-width: 0;
+            flex-shrink: 0;
         }
 
         .av-name {
             font-size: 10px;
-            color: #4a5568;
+            color: #2d3748;
             font-weight: 600;
-            width: 70px;
-            flex-shrink: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            flex: 0 0 42%;
+            line-height: 1.25;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .av-bg {
@@ -380,8 +384,9 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
         .av-pct {
             font-size: 10px;
             font-weight: 800;
-            width: 36px;
+            width: 46px;
             text-align: right;
+            white-space: nowrap;
             flex-shrink: 0;
         }
 
@@ -391,10 +396,25 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
             flex-direction: column;
             gap: 5px;
             flex: 1;
-            overflow: hidden;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 4px;
+        }
+
+        .av-list::-webkit-scrollbar,
+        .hist-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .av-list::-webkit-scrollbar-thumb,
+        .hist-list::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 3px;
         }
 
         .hist-item {
+            flex-shrink: 0;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -432,6 +452,96 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
             padding: 2px 7px;
             border-radius: 10px;
             flex-shrink: 0;
+        }
+
+        /* ── Top 5 donut + legend (nama process tampil penuh) ── */
+        .donut-wrap {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .donut-wrap .ch {
+            flex: 0 0 46%;
+            height: 100%;
+        }
+
+        .donut-legend {
+            flex: 1;
+            min-width: 0;
+            max-height: 100%;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            padding-right: 4px;
+        }
+
+        .dl-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .dl-sw {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+
+        .dl-name {
+            font-size: 10px;
+            font-weight: 600;
+            color: #2d3748;
+            line-height: 1.3;
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        .dl-name small {
+            display: block;
+            font-size: 9px;
+            font-weight: 600;
+            color: #718096;
+        }
+
+        /* Tooltip donat: elemen HTML di luar card agar tidak terpotong */
+        #chartTip {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .1s;
+            background: #1a202c;
+            color: #e2e8f0;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 11px;
+            line-height: 1.35;
+            max-width: 260px;
+            white-space: normal;
+        }
+
+        #chartTip .ct-title {
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        #chartTip .ct-sw {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 2px;
+            margin-right: 6px;
         }
 
         /* span helpers */
@@ -485,7 +595,7 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
                 <div>
                     <div class="kpi-icon" style="background:#ebf5ff">🏭</div>
                     <div class="kpi-val" style="color:#3b82f6"><?= $totalMachines ?></div>
-                    <div class="kpi-unit">Total Machines</div>
+                    <div class="kpi-unit">Total Process</div>
                 </div>
                 <div class="kpi-title">Terdaftar</div>
             </div>
@@ -514,7 +624,7 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
                     <div class="kpi-val" style="color:<?= $avgAvailability >= 98 ? '#38a169' : ($avgAvailability >= 95 ? '#d97706' : '#e53e3e') ?>"><?= $avgAvailability ?>%</div>
                     <div class="kpi-unit">Avg Availability</div>
                 </div>
-                <div class="kpi-title">Semua Mesin</div>
+                <div class="kpi-title">Semua Process</div>
             </div>
 
         </div>
@@ -523,20 +633,23 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
 
         <!-- Downtime bar (col 2, row 1) -->
         <div class="card">
-            <div class="card-label">Total Downtime per Machine (menit)</div>
+            <div class="card-label">Total Downtime per Process (menit)</div>
             <div class="ch"><canvas id="cDtBar"></canvas></div>
         </div>
 
         <!-- Breakdown count bar (col 3, row 1) -->
         <div class="card">
-            <div class="card-label">Jumlah Breakdown per Machine</div>
+            <div class="card-label">Jumlah Breakdown per Process</div>
             <div class="ch"><canvas id="cBdBar"></canvas></div>
         </div>
 
         <!-- Top 5 doughnut (col 4, row 1) -->
         <div class="card">
             <div class="card-label">Top 5 — Frekuensi Breakdown</div>
-            <div class="ch"><canvas id="cTop5"></canvas></div>
+            <div class="donut-wrap">
+                <div class="ch"><canvas id="cTop5"></canvas></div>
+                <div class="donut-legend" id="t5Legend"></div>
+            </div>
         </div>
 
         <!-- ── ROW 2 ── -->
@@ -555,7 +668,7 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
 
         <!-- Availability progress list (col 4, row 2) -->
         <div class="card">
-            <div class="card-label">Availability per Machine (%)</div>
+            <div class="card-label">Availability per Process (%)</div>
             <div class="av-list" id="avList"></div>
         </div>
 
@@ -563,7 +676,7 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
 
         <!-- History bar chart (col 2-3, row 3) -->
         <div class="card span2c">
-            <div class="card-label">Durasi Downtime per Kejadian — 8 Terbaru (menit)</div>
+            <div class="card-label">Durasi Downtime Terbaru (menit)</div>
             <div class="ch"><canvas id="cHist"></canvas></div>
         </div>
 
@@ -680,9 +793,88 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
             options: hbarOpts('x breakdown', '#ef4444')
         });
 
+        // Plugin: persentase horizontal (tegak) di tengah tiap potongan cincin donat
+        const donutPct = {
+            id: 'donutPct',
+            afterDatasetsDraw(chart) {
+                const {
+                    ctx
+                } = chart;
+                const data = chart.data.datasets[0].data.map(Number);
+                const total = data.reduce((a, b) => a + b, 0);
+                if (!total) return;
+                chart.getDatasetMeta(0).data.forEach((arc, i) => {
+                    if (!data[i]) return;
+                    const pos = arc.getCenterPoint();
+                    const arcLen = (arc.endAngle - arc.startAngle) * (arc.innerRadius + arc.outerRadius) / 2;
+                    if (arcLen < 14) return; // potongan terlalu sempit, lihat tooltip
+                    const txt = Math.round(data[i] / total * 100) + '%';
+                    const thick = arc.outerRadius - arc.innerRadius;
+                    const font = sz => `700 ${sz}px -apple-system,"Segoe UI",Arial,sans-serif`;
+                    ctx.save();
+                    // ukuran font menyesuaikan ketebalan cincin agar tulisan selalu di dalam grafik
+                    let size = 11;
+                    ctx.font = font(size);
+                    const w = ctx.measureText(txt).width;
+                    if (w > thick * 0.8) size = Math.floor(size * thick * 0.8 / w);
+                    if (size < 7) {
+                        ctx.restore();
+                        return;
+                    }
+                    ctx.font = font(size);
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.lineJoin = 'round';
+                    ctx.lineWidth = 2.5;
+                    ctx.strokeStyle = 'rgba(0,0,0,.35)';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.strokeText(txt, pos.x, pos.y);
+                    ctx.fillText(txt, pos.x, pos.y);
+                    ctx.restore();
+                });
+            }
+        };
+
+        // Tooltip donat (HTML, menempel di body supaya tidak terpotong card/canvas)
+        function donutTooltip(context) {
+            const {
+                chart,
+                tooltip
+            } = context;
+            let el = document.getElementById('chartTip');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'chartTip';
+                document.body.appendChild(el);
+            }
+            if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
+                el.style.opacity = 0;
+                return;
+            }
+            const dp = tooltip.dataPoints[0];
+            const tot = dp.dataset.data.reduce((a, b) => a + Number(b), 0);
+            const pct = tot ? (dp.raw / tot * 100).toFixed(1) : 0;
+            el.innerHTML = `<div class="ct-title">${dp.label}</div>
+                <div><span class="ct-sw" style="background:${pie5[dp.dataIndex]}"></span>${dp.raw}x breakdown (${pct}%)</div>`;
+            const rect = chart.canvas.getBoundingClientRect();
+            const x = rect.left + tooltip.caretX;
+            const y = rect.top + tooltip.caretY;
+            const w = el.offsetWidth,
+                h = el.offsetHeight;
+            let left = x + 14;
+            if (left + w > window.innerWidth - 8) left = x - w - 14;
+            left = Math.max(8, left);
+            let top = y - h / 2;
+            top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+            el.style.opacity = 1;
+        }
+
         // 3. Top 5 doughnut
         new Chart('cTop5', {
             type: 'doughnut',
+            plugins: [donutPct],
             data: {
                 labels: t5Mach,
                 datasets: [{
@@ -696,28 +888,29 @@ $jHiStart = json_encode(array_map(fn($r) => date('d/m H:i', strtotime($r['downti
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '55%',
+                cutout: '40%',
                 plugins: {
                     legend: {
-                        position: 'bottom',
-                        labels: {
-                            color: '#2d3748',
-                            boxWidth: 10,
-                            padding: 8,
-                            font: {
-                                size: 10,
-                                weight: '600'
-                            }
-                        }
+                        display: false
                     },
                     tooltip: {
-                        ...tt(),
-                        callbacks: {
-                            label: c => ` ${c.label}: ${c.raw}x`
-                        }
+                        enabled: false,
+                        external: donutTooltip
                     }
                 }
             }
+        });
+
+        // Legend HTML Top 5 (nama process penuh, wrap, scrollable bila panjang)
+        const t5Legend = document.getElementById('t5Legend');
+        const t5Sum = t5Tot.reduce((a, b) => a + Number(b), 0);
+        t5Mach.forEach((m, i) => {
+            const pct = t5Sum ? (t5Tot[i] / t5Sum * 100).toFixed(1) : 0;
+            t5Legend.innerHTML += `
+    <div class="dl-item">
+      <div class="dl-sw" style="background:${pie5[i]}"></div>
+      <div class="dl-name">${m}<small>${t5Tot[i]}x · ${pct}%</small></div>
+    </div>`;
         });
 
         // 4. MTTR

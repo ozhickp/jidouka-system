@@ -9,8 +9,11 @@
  * Conveyor TIDAK pernah dinyalakan otomatis di sini - START tetap manual.
  */
 
-// Plant yang hardware conveyor-nya sudah terpasang. Tambah 'test run' / 'packing' nanti.
-const CONVEYOR_AUTO_STOP_PLANTS = ['assembly'];
+// Plant yang aturan auto-stop conveyor-nya aktif (OFF otomatis di database
+// selama ada proses belum selesai, START tetap manual).
+// Assembly: hardware + service Raspi sudah ada.
+// Test Run & Packing: baru versi web dulu (belum terhubung ke Raspi).
+const CONVEYOR_AUTO_STOP_PLANTS = ['assembly', 'test run', 'packing'];
 
 function conveyor_id_for_plant($plant)
 {

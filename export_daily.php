@@ -1,7 +1,18 @@
 <?php
+set_time_limit(0);
+ini_set('memory_limit', '512M');
+
 session_start();
 include 'config.php';
-require 'vendor/autoload.php';
+
+if (!defined('EXPORT_AUTOLOAD')) {
+    define('EXPORT_AUTOLOAD', __DIR__ . '/vendor/autoload.php');
+}
+if (!is_file(EXPORT_AUTOLOAD)) {
+    http_response_code(500);
+    die('Autoloader PhpSpreadsheet tidak ditemukan: ' . EXPORT_AUTOLOAD);
+}
+require EXPORT_AUTOLOAD;
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -10,10 +21,14 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-$tanggal = $_GET['tanggal'] ?? '';
-if ($tanggal == "") die("Pilih tanggal terlebih dahulu.");
+// ── Parameter ─────────────────────────────────────────────────────────────────
+$tanggal = trim($_GET['tanggal'] ?? '');
+if ($tanggal === '') die('Pilih tanggal terlebih dahulu.');
+$dt = DateTime::createFromFormat('Y-m-d', $tanggal);
+if (!$dt || $dt->format('Y-m-d') !== $tanggal) die('Format tanggal tidak valid.');
 
-$query = "
+// ── Query ─────────────────────────────────────────────────────────────────────
+$stmt = $conn->prepare("
 SELECT 
     m.machine_name, m.plant, e.engine_name,
     l.*,
@@ -22,11 +37,12 @@ FROM maintenance_logs l
 JOIN machine m ON l.machine_id = m.id
 LEFT JOIN engine e ON l.engine_id = e.id
 LEFT JOIN downtime_logs dl ON dl.maintenance_logs_id = l.id
-WHERE DATE(l.waktu_mulai) = '$tanggal'
+WHERE DATE(l.waktu_mulai) = ?
 ORDER BY l.waktu_mulai ASC
-";
-
-$result = $conn->query($query);
+");
+$stmt->bind_param('s', $tanggal);
+$stmt->execute();
+$result = $stmt->get_result();
 
 /* EXCEL */
 $spreadsheet = new Spreadsheet();
@@ -38,11 +54,14 @@ $sheet->getColumnDimension('J')->setWidth(25);
 $sheet->getColumnDimension('K')->setWidth(25);
 
 /* LOGO */
-$logo = new Drawing();
-$logo->setPath('assets/company_logo.jpg');
-$logo->setHeight(60);
-$logo->setCoordinates('A1');
-$logo->setWorksheet($sheet);
+if (file_exists('assets/company_logo.jpg')) {
+    $logo = new Drawing();
+    $logo->setName('Company Logo');
+    $logo->setPath('assets/company_logo.jpg');
+    $logo->setHeight(60);
+    $logo->setCoordinates('A1');
+    $logo->setWorksheet($sheet);
+}
 
 /* TITLE */
 $sheet->mergeCells('A1:R1');
@@ -175,12 +194,36 @@ $sheet->getStyle("A4:R" . ($row - 1))->applyFromArray([
 
 $sheet->freezePane('A5');
 
-$writer = new Xlsx($spreadsheet);
+// ── Export ────────────────────────────────────────────────────────────────────
+// Sama seperti export_history_report.php [FIX-3]: simpan ke file temp dulu, baru
+// kirim ke browser. Langsung ke php://output berisiko: koneksi bisa dianggap
+// menggantung / file terpotong kalau proses generate (apalagi dengan banyak
+// gambar) belum selesai saat data mulai dikirim.
 $filename = "History_Maintenance_$tanggal.xlsx";
 
-header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-header("Content-Disposition: attachment;filename=\"$filename\"");
-header('Cache-Control: max-age=0');
+$writer = new Xlsx($spreadsheet);
+$writer->setPreCalculateFormulas(false);
 
-$writer->save("php://output");
+$tmpFile = tempnam(sys_get_temp_dir(), 'maint_daily_');
+try {
+    $writer->save($tmpFile);
+} catch (Throwable $e) {
+    @unlink($tmpFile);
+    http_response_code(500);
+    die('Gagal membuat file Excel: ' . $e->getMessage());
+}
+
+// Buang output yang mungkin sudah terlanjur keluar (spasi/BOM dari include),
+// supaya isi file .xlsx tidak rusak.
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
+
+header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+header("Content-Disposition: attachment; filename=\"{$filename}\"");
+header('Cache-Control: max-age=0');
+header('Content-Length: ' . filesize($tmpFile));
+
+readfile($tmpFile);
+unlink($tmpFile);
 exit;

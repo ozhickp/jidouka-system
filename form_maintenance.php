@@ -59,6 +59,133 @@ if ($machine['status'] == 2 && $machine['repair_status'] == 'pending') {
 }
 
 /* =========================
+   KOMPRES FOTO DOKUMENTASI
+   Foto dari HP bisa 3-10 MB per file. Sebelum disimpan, foto diperkecil
+   (sisi terpanjang maks. IMG_MAX_SIDE px) lalu di-encode ulang sebagai JPEG
+   kualitas IMG_QUALITY: biasanya jadi sekitar 200-500 KB, tetap tajam untuk
+   dokumentasi, dan jauh lebih ringan saat di-embed ke export Excel.
+   - Orientasi EXIF diterapkan lalu EXIF dibuang, jadi foto tidak miring di
+     Excel / viewer yang mengabaikan EXIF.
+   - PNG dikonversi ke JPEG (latar transparan jadi putih).
+   - Foto yang sudah kecil & tegak disimpan apa adanya (tanpa kompres ulang).
+   - Kalau ekstensi GD tidak ada / memori tidak cukup, foto disimpan apa
+     adanya (perilaku lama), jadi upload tidak pernah gagal gara-gara kompresi.
+   Ubah angka di bawah kalau ingin lebih tajam / lebih kecil.
+=========================*/
+const IMG_MAX_SIDE   = 1600;   // sisi terpanjang (px)
+const IMG_QUALITY    = 80;     // kualitas JPEG 0-100
+const IMG_SKIP_BYTES = 800000; // JPEG tegak sekecil ini (dan <= IMG_MAX_SIDE) tidak dikompres ulang
+
+function iniBytes($v)
+{
+    $v = trim((string)$v);
+    $n = (float)$v;
+    $u = strtolower(substr($v, -1));
+    if ($u === 'g') $n *= 1073741824;
+    elseif ($u === 'm') $n *= 1048576;
+    elseif ($u === 'k') $n *= 1024;
+    return (int)$n;
+}
+
+// Cukup memori untuk mendecode gambar $w x $h? (estimasi: sumber + hasil/rotasi)
+function imageMemoryOk($w, $h)
+{
+    $limit = iniBytes(ini_get('memory_limit'));
+    if ($limit <= 0) return true; // -1 = tanpa batas
+    $need = (int)($w * $h * 4 * 2.5);
+    if (memory_get_usage(true) + $need <= $limit) return true;
+    if ($limit < 536870912) { // coba naikkan ke 512M
+        @ini_set('memory_limit', '512M');
+        $limit = iniBytes(ini_get('memory_limit'));
+        return $limit <= 0 || memory_get_usage(true) + $need <= $limit;
+    }
+    return false;
+}
+
+// Simpan foto upload ke $folder. Mengembalikan nama file yang tersimpan,
+// atau '' kalau file bukan gambar JPG/PNG yang valid / gagal disimpan.
+function saveCompressedImage($tmpPath, $folder, $prefix)
+{
+    $info = @getimagesize($tmpPath);
+    if (!$info || !in_array($info['mime'], ['image/jpeg', 'image/png'], true)) {
+        return '';
+    }
+    $isJpeg   = ($info['mime'] === 'image/jpeg');
+    $w        = (int)$info[0];
+    $h        = (int)$info[1];
+    $origSize = (int)filesize($tmpPath);
+    $baseName = $prefix . time();
+    $keepName = $baseName . '.' . ($isJpeg ? 'jpg' : 'png');
+
+    // Orientasi EXIF (hanya JPEG)
+    $orientation = 1;
+    if ($isJpeg && function_exists('exif_read_data')) {
+        $exif = @exif_read_data($tmpPath);
+        if (!empty($exif['Orientation'])) $orientation = (int)$exif['Orientation'];
+    }
+
+    $gdOk = function_exists('imagecreatefromjpeg') && function_exists('imagecreatefrompng')
+        && function_exists('imagecreatetruecolor') && function_exists('imagejpeg');
+
+    // Tidak bisa / tidak perlu dikompres -> simpan apa adanya
+    $alreadyOk = $isJpeg && $origSize <= IMG_SKIP_BYTES && max($w, $h) <= IMG_MAX_SIDE && $orientation <= 1;
+    if (!$gdOk || $alreadyOk || $w < 1 || $h < 1 || !imageMemoryOk($w, $h)) {
+        return move_uploaded_file($tmpPath, $folder . $keepName) ? $keepName : '';
+    }
+
+    $src = $isJpeg ? @imagecreatefromjpeg($tmpPath) : @imagecreatefrompng($tmpPath);
+    if (!$src) {
+        return move_uploaded_file($tmpPath, $folder . $keepName) ? $keepName : '';
+    }
+
+    // Terapkan orientasi EXIF (imagerotate memutar berlawanan arah jarum jam)
+    $angle = 0;
+    if ($orientation === 3) $angle = 180;
+    elseif ($orientation === 6) $angle = -90;
+    elseif ($orientation === 8) $angle = 90;
+    if ($angle !== 0 && function_exists('imagerotate')) {
+        $rot = imagerotate($src, $angle, 0);
+        if ($rot) {
+            imagedestroy($src);
+            $src = $rot;
+            $w = imagesx($src);
+            $h = imagesy($src);
+        } else {
+            $angle = 0;
+        }
+    } else {
+        $angle = 0;
+    }
+
+    // Perkecil kalau melebihi IMG_MAX_SIDE
+    $scale = min(1, IMG_MAX_SIDE / max($w, $h));
+    $nw = max(1, (int)round($w * $scale));
+    $nh = max(1, (int)round($h * $scale));
+    $dst = imagecreatetruecolor($nw, $nh);
+    imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255)); // latar putih (PNG transparan)
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    imagedestroy($src);
+
+    $newName = $baseName . '.jpg';
+    $newPath = $folder . $newName;
+    $ok = imagejpeg($dst, $newPath, IMG_QUALITY);
+    imagedestroy($dst);
+
+    if (!$ok) {
+        @unlink($newPath);
+        return move_uploaded_file($tmpPath, $folder . $keepName) ? $keepName : '';
+    }
+
+    // Kalau hasilnya malah lebih besar dari aslinya (tanpa perubahan ukuran/rotasi), pakai aslinya
+    if ($isJpeg && $angle === 0 && $scale >= 1 && (int)filesize($newPath) >= $origSize) {
+        @unlink($newPath);
+        return move_uploaded_file($tmpPath, $folder . $keepName) ? $keepName : '';
+    }
+
+    return $newName;
+}
+
+/* =========================
    AMBIL DATA ENGINE (POST atau GET)
 =========================*/
 $engine_type = $_POST['engine_type'] ?? ($_GET['engine_name'] ?? null);
@@ -119,8 +246,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!is_dir($folder)) mkdir($folder, 0777, true);
         $ext = strtolower(pathinfo($_FILES['dokumentasi_machine']['name'], PATHINFO_EXTENSION));
         if (in_array($ext, ['jpg', 'jpeg', 'png']) && $_FILES['dokumentasi_machine']['size'] <= 10000000) {
-            $namaFile_machine = "IMG_MACHINE_" . time() . "." . $ext;
-            move_uploaded_file($_FILES['dokumentasi_machine']['tmp_name'], $folder . $namaFile_machine);
+            // Dikompres otomatis (lihat saveCompressedImage di atas)
+            $namaFile_machine = saveCompressedImage($_FILES['dokumentasi_machine']['tmp_name'], $folder, "IMG_MACHINE_");
+            if ($namaFile_machine === '') die("File dokumentasi machine bukan gambar JPG/PNG yang valid.");
         } else die("File dokumentasi machine harus JPG/PNG max 10MB.");
     }
 
@@ -130,8 +258,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!is_dir($folder)) mkdir($folder, 0777, true);
         $ext = strtolower(pathinfo($_FILES['dokumentasi_engine']['name'], PATHINFO_EXTENSION));
         if (in_array($ext, ['jpg', 'jpeg', 'png']) && $_FILES['dokumentasi_engine']['size'] <= 10000000) {
-            $namaFile_engine = "IMG_ENGINE_" . time() . "." . $ext;
-            move_uploaded_file($_FILES['dokumentasi_engine']['tmp_name'], $folder . $namaFile_engine);
+            // Dikompres otomatis (lihat saveCompressedImage di atas)
+            $namaFile_engine = saveCompressedImage($_FILES['dokumentasi_engine']['tmp_name'], $folder, "IMG_ENGINE_");
+            if ($namaFile_engine === '') die("File dokumentasi engine bukan gambar JPG/PNG yang valid.");
         } else die("File dokumentasi engine harus JPG/PNG max 10MB.");
     }
 
@@ -436,7 +565,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             scopes.forEach(scope => {
                 scope.querySelectorAll('input:not([type="hidden"]), textarea').forEach(el => {
                     if (el.type === 'file') {
-                        if (el.files.length === 0) valid = false;
+                        if (el.files.length === 0 || el.dataset.busy === '1') valid = false; // busy = foto sedang dikompres
                     } else if (!el.value.trim()) {
                         valid = false;
                     }
@@ -475,6 +604,74 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 img.src = url;
                 img.dataset.url = url;
                 wrap.classList.remove('d-none');
+            });
+        });
+
+        // =========================
+        // Kompres foto otomatis sebelum diupload (galeri maupun kamera)
+        // Sisi terpanjang dibatasi IMG_MAX_SIDE px, JPEG kualitas IMG_QUALITY.
+        // Hasilnya dimasukkan kembali ke input file yang sama, jadi proses
+        // submit tidak berubah. Server tetap memeriksa/mengompres ulang kalau perlu.
+        // =========================
+        const IMG_MAX_SIDE = 1600;
+        const IMG_QUALITY = 0.8;
+
+        async function compressImageFile(file) {
+            if (!file || !/^image\/(jpeg|png)$/.test(file.type)) return file;
+            let bitmap;
+            try {
+                // 'from-image' = foto HP yang diputar via EXIF tetap tegak
+                bitmap = await createImageBitmap(file, {
+                    imageOrientation: 'from-image'
+                });
+            } catch (e) {
+                try {
+                    bitmap = await createImageBitmap(file);
+                } catch (e2) {
+                    return file; // browser lama: upload apa adanya, server yang mengompres
+                }
+            }
+            const scale = Math.min(1, IMG_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+            const cw = Math.max(1, Math.round(bitmap.width * scale));
+            const ch = Math.max(1, Math.round(bitmap.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = cw;
+            canvas.height = ch;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff'; // latar putih untuk PNG transparan
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.drawImage(bitmap, 0, 0, cw, ch);
+            if (bitmap.close) bitmap.close();
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', IMG_QUALITY));
+            if (!blob) return file;
+            // Kalau tidak diperkecil & hasilnya tidak lebih kecil, pakai file asli
+            if (scale >= 1 && file.type === 'image/jpeg' && blob.size >= file.size) return file;
+            const base = file.name.replace(/\.[^.]+$/, '');
+            return new File([blob], 'cmp_' + base + '.jpg', {
+                type: 'image/jpeg'
+            });
+        }
+
+        document.querySelectorAll('input[type="file"]').forEach(input => {
+            input.addEventListener('change', async () => {
+                const file = input.files[0];
+                // foto dari kamera sudah dikecilkan saat diambil; hasil kompres tidak diproses ulang
+                if (!file || file.name.startsWith('camera_') || file.name.startsWith('cmp_')) return;
+                input.dataset.busy = '1';
+                validateForm();
+                try {
+                    const small = await compressImageFile(file);
+                    if (small !== file && input.files[0] === file) { // pengguna belum ganti file lain
+                        const dt = new DataTransfer();
+                        dt.items.add(small);
+                        input.files = dt.files;
+                    }
+                } catch (e) {
+                    /* gagal kompres: tetap pakai file asli */
+                } finally {
+                    delete input.dataset.busy;
+                    validateForm();
+                }
             });
         });
 
@@ -587,9 +784,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             const w = camVideo.videoWidth;
             const h = camVideo.videoHeight;
             if (!w || !h || !camTarget) return;
-            camCanvas.width = w;
-            camCanvas.height = h;
-            camCanvas.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+            const camScale = Math.min(1, IMG_MAX_SIDE / Math.max(w, h));
+            const cw = Math.max(1, Math.round(w * camScale));
+            const ch = Math.max(1, Math.round(h * camScale));
+            camCanvas.width = cw;
+            camCanvas.height = ch;
+            camCanvas.getContext('2d').drawImage(camVideo, 0, 0, cw, ch);
             const targetId = camTarget;
             camCanvas.toBlob(blob => {
                 if (!blob) return;
@@ -604,7 +804,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     bubbles: true
                 })); // memicu validasi & preview
                 closeCamera();
-            }, 'image/jpeg', 0.9);
+            }, 'image/jpeg', IMG_QUALITY);
         }
 
         document.querySelectorAll('.btn-camera').forEach(btn => {
@@ -666,6 +866,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (!engineInput.contains(e.target)) suggestionBox.innerHTML = '';
         });
     </script>
-</body>
+</body> 
 
 </html>

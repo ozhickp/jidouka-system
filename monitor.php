@@ -469,6 +469,10 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
     <script>
         let previousAbnormalCount = 0;
         let abnormalMachinesList = [];
+        // Semua mesin yang BELUM selesai (status 2 = baru dilapor, 3 = sedang diperbaiki).
+        // Dipakai khusus untuk kunci conveyor, terpisah dari abnormalMachinesList
+        // (yang tetap hanya status 2 untuk panel notifikasi & navbar).
+        let unfinishedMachinesList = [];
         let currentPlant = "<?= $plant ?>";
         let hasInitialLoad = false;
         let soundEnabled = true;
@@ -627,6 +631,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
                         .then(results => {
 
                             abnormalMachinesList = [];
+                            unfinishedMachinesList = [];
 
                             results.forEach(list => {
 
@@ -634,7 +639,11 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
                                     list.forEach(machine => {
 
-                                        if (parseInt(machine.status) === 2) {
+                                        const st = parseInt(machine.status);
+                                        if (st === 2 || st === 3) {
+                                            unfinishedMachinesList.push(machine);
+                                        }
+                                        if (st === 2) {
                                             abnormalMachinesList.push(machine);
                                         }
 
@@ -930,7 +939,7 @@ $plant = isset($_GET['plant']) ? $_GET['plant'] : 'assembly';
 
         // ── Cek apakah ada mesin abnormal di plant saat ini ──
         function hasAbnormalMachine() {
-            return abnormalMachinesList.some(m =>
+            return unfinishedMachinesList.some(m =>
                 m.plant.toLowerCase() === currentPlant.toLowerCase()
             );
         }

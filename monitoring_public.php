@@ -111,16 +111,11 @@
             flex-shrink: 0;
         }
 
-        .col-assembly .plant-header {
-            background: #1a73e8;
-        }
-
-        .col-testrun .plant-header {
-            background: #7b2d8b;
-        }
-
+        /* Warna header = warna line (sumber tunggal: --line-color di bawah) */
+        .col-assembly .plant-header,
+        .col-testrun .plant-header,
         .col-packing .plant-header {
-            background: #e67e22;
+            background: var(--line-color);
         }
 
         .plant-summary {
@@ -131,6 +126,19 @@
             border-radius: 20px;
             letter-spacing: 0;
             white-space: nowrap;
+        }
+
+        /* Warna tiap line - */
+        .col-assembly {
+            --line-color: #4400A8;
+        }
+
+        .col-testrun {
+            --line-color: #00717F;
+        }
+
+        .col-packing {
+            --line-color: #AB03A9;
         }
 
         /* ── TOMBOL ALARM DI SAMPING NAMA LINE ── */
@@ -427,19 +435,63 @@
             }
         }
 
+        /* Clear: latar card mengikuti warna line (biru / ungu / orange) */
         .machine_card.status-running {
             border-color: #28a745;
+            background: var(--line-color, #2c3136);
         }
 
+        /* Stop / Belum Ditangani: card merah penuh */
         .machine_card.status-abnormal {
-            border-color: #dc3545;
-            background: #3a1f1f;
+            border-color: #ff8a94;
+            background: #D50000;
         }
 
-        /* Proses normal saat line sedang ada masalah = lampu mati (OFF) */
+        /* Stop / Sedang Ditangani: card kuning penuh (class card-progress
+           ditempel via JS saat maintenance_status = "Sedang Ditangani") */
+        .machine_card.status-abnormal.card-progress {
+            border-color: #fff3bf;
+            background: #FFE600;
+        }
+
+        .machine_card.status-abnormal.card-progress .machine-name {
+            color: #212529;
+        }
+
+        .machine_card.status-abnormal.card-progress .abnormal_time {
+            background: rgba(0, 0, 0, .8);
+        }
+
+        /* Proses normal saat line sedang ada masalah = lampu mati (OFF).
+           Latar tetap warna line, dibedakan lewat badge abu + sedikit pudar */
         .machine_card.status-off {
             border-color: #6c757d;
-            opacity: .6;
+            background: var(--line-color, #2c3136);
+            opacity: .75;
+        }
+
+        /* Lonceng di atas card merah/kuning: diberi kontras dengan latar */
+        .machine_card.status-abnormal .machine-alarm-btn.alarm-active {
+            background: #fff;
+            color: #dc3545;
+            animation: alarmPulseSmallWhite 1s infinite;
+        }
+
+        .machine_card.status-abnormal.card-progress .machine-alarm-btn.alarm-idle {
+            background: rgba(0, 0, 0, .3);
+            color: #fff;
+        }
+
+        @keyframes alarmPulseSmallWhite {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, .8);
+            }
+
+            50% {
+                box-shadow: 0 0 0 5px rgba(255, 255, 255, 0);
+            }
         }
 
         .machine-name {
@@ -478,7 +530,7 @@
         }
 
         .status-badge.abnormal {
-            background: #dc3545;
+            background: #7a0f1c;
         }
 
         .status-badge.off {
@@ -495,18 +547,18 @@
         }
 
         .maint-clear {
-            background: #1a4731;
-            color: #6ee7a0;
+            background: rgba(255, 255, 255, .92);
+            color: #1b6e35;
         }
 
         .maint-pending {
-            background: #4a1a1a;
-            color: #f87171;
+            background: #7a0f1c;
+            color: #ffffff;
         }
 
         .maint-progress {
-            background: #4a3500;
-            color: #fcd34d;
+            background: #212529;
+            color: #ffd43b;
         }
 
         .abnormal_time {
@@ -641,7 +693,7 @@
         <!-- HEADER -->
         <div class="header">
             <a href="index.php" class="back-btn">&#8592; Back</a>
-            <div class="header-title">🖥️ MACHINE MONITORING</div>
+            <div class="header-title">HDE Jidouka System</div>
             <div id="clock">--:--:--</div>
         </div>
 
@@ -985,7 +1037,10 @@
                                     maintText = maint.textContent.trim();
                                     if (maintText === 'Clear') maint.classList.add('maint-clear');
                                     else if (maintText === 'Belum Ditangani') maint.classList.add('maint-pending');
-                                    else if (maintText === 'Sedang Ditangani') maint.classList.add('maint-progress');
+                                    else if (maintText === 'Sedang Ditangani') {
+                                        maint.classList.add('maint-progress');
+                                        card.classList.add('card-progress');
+                                    }
                                     maint.removeAttribute('style');
                                 }
 

@@ -1,0 +1,8 @@
+tambahan:
+//1. perlu adanya status baru, yaitu 'rework', selain status yang sudah ada. 
+2. perlu ada on/off mesin/conveyor, tanpa harus berubah kondisi dari running to abnormal
+//3. view monitoring tidak perlu ada login, jadi dalam index, ada 2 pilihan, view monitoring dan login.
+//4. tambahan notifikasi pop-up untuk konfirmasi perbaikan. (Ketika klik konfirmasi perbaikan, ada modal pop-up "ingin melanjutkan?" dengan pilihan lanjut atau cancel. jadi tidak langsung masuk ke form maintenance.
+5. timer untuk kondisi default Waktu on dari mesin (missal diatur timer on di jam 07.00, namun ternyata operator/supervisor menyalakan di jam 08.00. jadi ada missing 1 jam, nah itu bisa dibuat report juga, mengapa on di jam tersebut. begitu juga Ketika overtime, missal mesin hanya beroperasi selama 8 jam, ternyata ada overtime 1 jam, jadi mesin beroperasi selama 9 jam, nah itu juga ada tambahan.
+//6. notifikasi juga tampil pada navbar, Ketika ada mesin yang problem.
+7. membuat button untuk menyalakan conveyor, dengan aturan kondisi mesin di [1] plant tersebut running semua.
